@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.conda_envs/
+.conda_pkgs/
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Sensitive data - DO NOT COMMIT
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/recordings/
+storage/*.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Config with potential secrets
+.env
+.env.*
+config.local.*
+
+# Cache
+.cache/
+*.cache
+
+# Home directory files (conda configs)
+.home/
+.condarc
+
+# Logs
+*.log
+
+# Large binary files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp3
+*.wav
