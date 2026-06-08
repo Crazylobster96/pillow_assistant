@@ -92,8 +92,10 @@ class ModelConfigDialog(QDialog):
         button_row = QHBoxLayout()
         self.add_button = QPushButton(t("config.add"), self)
         self.remove_button = QPushButton(t("config.remove"), self)
+        self.default_button = QPushButton(t("config.set_default"), self)
         button_row.addWidget(self.add_button)
         button_row.addWidget(self.remove_button)
+        button_row.addWidget(self.default_button)
         button_row.addStretch(1)
         layout.addLayout(button_row)
 
@@ -117,7 +119,20 @@ class ModelConfigDialog(QDialog):
 
         self.add_button.clicked.connect(self._add_or_update_config)
         self.remove_button.clicked.connect(self._remove_selected_config)
+        self.default_button.clicked.connect(self._set_default_chat_model)
         self.table.itemSelectionChanged.connect(self._populate_from_selection)
+
+    def _set_default_chat_model(self) -> None:
+        """Persist the selected model as the chat-role default (model_roles)."""
+        rows = {item.row() for item in self.table.selectedItems()}
+        if not rows:
+            return
+        name = self.configs[sorted(rows)[0]]["display_name"]
+        from pillow_assistant.core.model_roles import assign
+        assign("chat", name)
+        self._refresh_table()
+        QMessageBox.information(self, t("config.set_default"),
+                                t("config.default_done", name=name))
 
     def _add_or_update_config(self) -> None:
         display_name = self.display_name_edit.text().strip()
@@ -158,9 +173,16 @@ class ModelConfigDialog(QDialog):
         self._clear_form()
 
     def _refresh_table(self) -> None:
+        try:
+            from pillow_assistant.core.model_roles import load_roles
+            default_chat = load_roles().get("chat")
+        except Exception:
+            default_chat = None
         self.table.setRowCount(len(self.configs))
         for row_idx, cfg in enumerate(self.configs):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(cfg["display_name"]))
+            name = cfg["display_name"]
+            tag = t("config.default_tag") if name == default_chat else ""
+            self.table.setItem(row_idx, 0, QTableWidgetItem(name + tag))
             self.table.setItem(row_idx, 1, QTableWidgetItem(cfg["provider"]))
             self.table.setItem(row_idx, 2, QTableWidgetItem(cfg["model_type"]))
             self.table.setItem(row_idx, 3, QTableWidgetItem(cfg.get("model") or ""))
@@ -170,28 +192,4 @@ class ModelConfigDialog(QDialog):
         self.display_name_edit.clear()
         self.model_edit.clear()
         self.base_url_edit.clear()
-        self.api_key_edit.clear()
-        self.extra_edit.clear()
-        self.provider_combo.setCurrentIndex(0)
-        self.model_type_combo.setCurrentIndex(0)
-
-    def _populate_from_selection(self) -> None:
-        rows = {item.row() for item in self.table.selectedItems()}
-        if len(rows) != 1:
-            return
-        idx = rows.pop()
-        cfg = self.configs[idx]
-        self.provider_combo.setCurrentText(cfg["provider"])
-        self.model_type_combo.setCurrentText(cfg["model_type"])
-        self.display_name_edit.setText(cfg["display_name"])
-        self.model_edit.setText(cfg.get("model") or "")
-        self.base_url_edit.setText(cfg.get("base_url") or "")
-        self.api_key_edit.setText(cfg.get("api_key") or "")
-        self.extra_edit.setPlainText(cfg.get("extra") or "")
-
-    def accept(self) -> None:
-        if not self.configs:
-            QMessageBox.warning(self, t("config.need_one_title"), t("config.need_one"))
-            return
-        self.storage.replace_model_configs(self.configs, self.vault)
-        super().accept()
+        self.api_key_ed
