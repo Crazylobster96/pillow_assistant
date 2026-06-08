@@ -110,6 +110,34 @@ class ProjectStore:
         self._write(project)
         return project
 
+    def delete(self, project_id: str) -> bool:
+        """Permanently remove a project directory (metadata + workspace +
+        sessions). Returns True if it existed and was removed."""
+        import shutil
+
+        if not project_id:
+            return False
+        root = self.base / project_id
+        if not root.is_dir() or self._meta_path(root).exists() is False:
+            return False
+        try:
+            shutil.rmtree(root)
+            return True
+        except OSError:
+            return False
+
+    def find_by_name(self, name: str) -> list[Project]:
+        """Projects whose name matches ``name`` (exact first, else substring)."""
+        name = (name or "").strip()
+        if not name:
+            return []
+        projects = self.list()
+        exact = [p for p in projects if p.name == name]
+        if exact:
+            return exact
+        low = name.lower()
+        return [p for p in projects if low in p.name.lower()]
+
     def index(self) -> list[dict]:
         return [
             {"id": p.id, "name": p.name, "last_prompt": p.last_prompt, "updated_at": p.updated_at}

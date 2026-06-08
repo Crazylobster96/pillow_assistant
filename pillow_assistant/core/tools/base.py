@@ -37,6 +37,7 @@ class ToolContext:
     request_id: str = ""                   # id of the request this run serves (for emitted events)
     storage: Any = None                    # optional Storage for self-configuration tools
     ask: Any = None                        # optional async callable(spec)->dict to ask the user
+    project_store: Any = None              # optional ProjectStore for project management tools
 
 
 @dataclass
@@ -53,6 +54,4 @@ class Tool(Protocol):
     name: str
     description: str
     parameters: dict
-    permission: Permission
-
-    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult: ...
+    permis
