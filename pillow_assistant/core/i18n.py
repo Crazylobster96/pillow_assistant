@@ -122,6 +122,9 @@ _ZH = {
     "config.extra_ph": '额外参数（JSON 字符串，可选），例如 {"temperature": 0.7}',
     "config.add": "添加/更新",
     "config.remove": "删除选中",
+    "config.set_default": "设为默认对话模型",
+    "config.default_done": "已将「{name}」设为默认对话模型",
+    "config.default_tag": "（默认）",
     "config.hint": "提示：模型类型用于区分文本模型 (llm) 与多模态模型 (vlm)；API Key 存入系统密钥库，不落数据库。",
     "config.missing_title": "缺少信息",
     "config.missing_name": "请填写显示名称。",
@@ -134,7 +137,8 @@ _ZH = {
     "core.project_continue": "（延续）",
     "core.project_new": "（新建）",
     "core.chat_note": "💬 对话",
-    "core.max_steps": "\n[已达到最大步数，停止]",
+    "core.max_steps": "\n[已达到最大步数，先停一下。回复「继续」可保留现场接着做]",
+    "core.answer_sep": "\n\n—— 回答 ——\n",
     "core.unnamed_task": "未命名任务",
     # -- references --------------------------------------------------------------
     "refs.missing": "[引用缺失] {path}",
@@ -263,6 +267,11 @@ _ZH = {
     "tool.lang.lang": "目标语言：zh 或 en",
     "tool.lang.bad": "不支持的语言：{lang}（可选 zh / en）",
     "tool.lang.done": "已切换语言为 {lang}；动态文字立即生效，少量界面文字在重启后生效",
+    "tool.steps.desc": "设置 Agent 工具循环的最大步数并持久化（1-500，当前默认 50）。"
+                       "用户要求调整最大步数/觉得任务总被中断时使用；下个请求即生效。",
+    "tool.steps.steps": "新的最大步数（1-500）",
+    "tool.steps.bad": "无效的步数：{v}（应为 1-500 的整数）",
+    "tool.steps.done": "最大步数已设为 {n}，下个请求生效",
     # -- tools: ask_user -------------------------------------------------------------------------
     "tool.ask.desc": "当你不确定、需要用户确认或补充信息时，弹出对话框向用户提问并等待回答。"
                      "可给 options 让用户从选项中选，或 allow_text 让用户自由输入；不要用它替代你能自己完成的判断。",
@@ -404,6 +413,9 @@ _EN = {
     "config.extra_ph": 'extra params (JSON string, optional), e.g. {"temperature": 0.7}',
     "config.add": "Add / Update",
     "config.remove": "Remove selected",
+    "config.set_default": "Set as default chat model",
+    "config.default_done": "\"{name}\" is now the default chat model",
+    "config.default_tag": " (default)",
     "config.hint": "Tip: model type distinguishes text (llm) from multimodal (vlm); API keys go to the OS keyring, never the database.",
     "config.missing_title": "Missing info",
     "config.missing_name": "Please fill in the display name.",
@@ -415,7 +427,8 @@ _EN = {
     "core.project_continue": " (continued)",
     "core.project_new": " (new)",
     "core.chat_note": "💬 Chat",
-    "core.max_steps": "\n[max steps reached, stopping]",
+    "core.max_steps": "\n[max steps reached, pausing — reply \"continue\" to resume with full context]",
+    "core.answer_sep": "\n\n—— Answer ——\n",
     "core.unnamed_task": "Untitled task",
     "refs.missing": "[missing reference] {path}",
     "refs.dir_unreadable": "Folder {path} (unreadable: {err})",
@@ -545,6 +558,12 @@ _EN = {
     "tool.lang.lang": "target language: zh or en",
     "tool.lang.bad": "Unsupported language: {lang} (zh / en)",
     "tool.lang.done": "Language switched to {lang}; dynamic texts apply immediately, a few UI labels after restart",
+    "tool.steps.desc": "Set and persist the Agent's tool-loop step budget (1-500, default 50). "
+                       "Use when the user asks to change the max steps or tasks keep getting cut off; "
+                       "applies from the next request.",
+    "tool.steps.steps": "new max steps (1-500)",
+    "tool.steps.bad": "Invalid steps: {v} (integer 1-500)",
+    "tool.steps.done": "Max steps set to {n}; applies from the next request",
     "tool.ask.desc": "When you're unsure or need the user to confirm or supply information, pop up a dialog "
                      "to ask and wait for the answer. Provide options for a multiple-choice pick, or "
                      "allow_text for free input; don't use it to offload judgements you can make yourself.",
