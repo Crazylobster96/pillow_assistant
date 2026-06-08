@@ -25,6 +25,7 @@ class AskUserTool:
                 "description": t("tool.ask.options"),
             },
             "allow_text": {"type": "boolean", "description": t("tool.ask.allow_text")},
+            "multi_select": {"type": "boolean", "description": t("tool.ask.multi")},
         },
         "required": ["question"],
     }
@@ -37,12 +38,15 @@ class AskUserTool:
         if not question:
             return ToolResult(ok=False, text=t("tool.ask.empty"))
         options = [str(o) for o in (args.get("options") or []) if str(o).strip()]
+        multi = bool(args.get("multi_select"))
         allow_text = args.get("allow_text")
         if allow_text is None:
-            allow_text = not options  # free text by default only when no options
+            # Free text by default when no options, or always offered as the
+            # "other" field in multi-select.
+            allow_text = (not options) or multi
 
         result = await ask({"question": question, "options": options,
-                            "allow_text": bool(allow_text)})
+                            "allow_text": bool(allow_text), "multi": multi})
         if result.get("timeout"):
             return ToolResult(ok=False, text=t("tool.ask.timeout"))
         if result.get("cancelled"):
