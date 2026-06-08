@@ -286,8 +286,7 @@ class FloatingAssistant(QWidget):
         dlg.destroyed.connect(lambda *_, d=dlg: setattr(self, "_ask_dialog", None)
                               if self._ask_dialog is d else None)
         self._ask_dialog = dlg
-        dlg.adjustSize()
-        dlg.move(self.frameGeometry().topRight() + QPoint(12, 0))
+        self._place_near_icon(dlg)
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
@@ -426,7 +425,7 @@ class FloatingAssistant(QWidget):
                                 payload.get("artifacts", []), payload.get("workspace", ""))
         win.destroyed.connect(lambda *_, w=win: setattr(self, "_surface_win", None) if self._surface_win is w else None)
         self._surface_win = win
-        win.move(self.frameGeometry().topRight() + QPoint(12, 0))
+        self._place_near_icon(win)
         win.show()
         win.raise_()
         win.activateWindow()
@@ -445,8 +444,7 @@ class FloatingAssistant(QWidget):
         toast = UndoToast(ev.text or t("undo.default_label"),
                           lambda tok=token: self.undo_manager.undo(tok))
         self._undo_toast = toast
-        toast.adjustSize()
-        toast.move(self.frameGeometry().topRight() + QPoint(8, 4))
+        self._place_near_icon(toast)
         toast.show()
         toast.raise_()
 
@@ -464,7 +462,34 @@ class FloatingAssistant(QWidget):
     # -- positioning --------------------------------------------------------
     def _followers(self) -> list:
         return [self._quick, self._panel, self._radial, self._projects_win,
-                self._surface_win] + list(self._multi_wins)
+                self._surface_win, self._undo_toast, self._ask_dialog] + list(self._multi_wins)
+
+    def _place_near_icon(self, w) -> None:
+        """Place a transient window (undo toast / result window / ask dialog)
+        beside the icon: stacked below earlier ones instead of overlapping,
+        flipped to the left side when the right edge has no room, and clamped
+        on-screen."""
+        w.adjustSize()
+        fg = self.frameGeometry()
+        scr = QGuiApplication.screenAt(fg.center()) or QGuiApplication.primaryScreen()
+        g = scr.availableGeometry()
+        x = fg.right() + 12
+        if x + w.width() > g.right():
+            x = max(g.left(), fg.left() - w.width() - 12)
+        y = fg.top() + 4
+        for other in (self._undo_toast, self._ask_dialog, self._surface_win):
+            if other is None or other is w:
+                continue
+            try:
+                if other.isVisible():
+                    og = other.frameGeometry()
+                    if abs(og.x() - x) < max(og.width(), w.width()):
+                        y = max(y, og.bottom() + 8)  # stack below, don't overlap
+            except RuntimeError:
+                continue
+        x = min(max(g.left(), x), max(g.left(), g.right() - w.width()))
+        y = min(max(g.top(), y), max(g.top(), g.bottom() - w.height()))
+        w.move(x, y)
 
     def _capture_follow_offsets(self) -> None:
         """Pin each popup's offset to the icon at drag start. During the drag we
@@ -911,39 +936,4 @@ def create_close_icon(size: int) -> QPixmap:
     # Soft dual-tone background.
     bg_gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
     bg_gradient.setColorAt(0.0, QColor(255, 140, 150, 245))
-    bg_gradient.setColorAt(1.0, QColor(220, 70, 100, 255))
-
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(bg_gradient)
-    painter.drawEllipse(rect)
-
-    # Inner glow ring.
-    ring_pen = QPen(QColor(255, 255, 255, 120))
-    ring_pen.setWidthF(max(1.2, size * 0.04))
-    painter.setPen(ring_pen)
-    painter.setBrush(Qt.NoBrush)
-    painter.drawEllipse(rect.adjusted(int(size * 0.05), int(size * 0.05), -int(size * 0.05), -int(size * 0.05)))
-
-    # Cross mark.
-    cross_pen = QPen(QColor(255, 255, 255, 240))
-    cross_pen.setWidthF(max(2.2, size * 0.14))
-    cross_pen.setCapStyle(Qt.RoundCap)
-    painter.setPen(cross_pen)
-
-    offset = radius * 0.55
-    painter.drawLine(
-        QPointF(center.x() - offset, center.y() - offset),
-        QPointF(center.x() + offset, center.y() + offset),
-    )
-    painter.drawLine(
-        QPointF(center.x() - offset, center.y() + offset),
-        QPointF(center.x() + offset, center.y() - offset),
-    )
-
-    painter.end()
-    return pixmap
-
-
-def is_supported_image(path: str | Path) -> bool:
-    suffix = Path(path).suffix.lower()
-    return suffix in {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+    bg_g
