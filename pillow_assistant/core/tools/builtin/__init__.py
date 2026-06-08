@@ -14,6 +14,7 @@ def build_default_registry() -> ToolRegistry:
         ConfigureModelTool,
         ListModelsTool,
         SetLanguageTool,
+        SetMaxStepsTool,
     )
     from pillow_assistant.core.tools.builtin.file_tool import FileListTool, FileReadTool, FileWriteTool
     from pillow_assistant.core.tools.builtin.http_tool import HttpRequestTool
@@ -33,4 +34,8 @@ def build_default_registry() -> ToolRegistry:
     reg.register(ListModelsTool())
     reg.register(ConfigureModelTool())
     reg.register(AssignModelRoleTool())
-   
+    reg.register(SetLanguageTool())
+    reg.register(SetMaxStepsTool())
+    reg.register(AskUserTool())
+    reg.register(ProcessVideoTool())
+    return reg

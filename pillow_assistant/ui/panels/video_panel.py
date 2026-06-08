@@ -87,4 +87,93 @@ class VideoPanel(FilePanel):
         self._slider = QSlider(Qt.Horizontal, self)
         self._slider.setRange(0, 0)
         self._slider.sliderMoved.connect(self._player.setPosition)
-        row.addW
+        row.addWidget(self._slider, 1)
+
+        self._time_label = QLabel("00:00 / 00:00", self)
+        row.addWidget(self._time_label)
+        layout.addLayout(row)
+
+        self._player.durationChanged.connect(self._on_duration)
+        self._player.positionChanged.connect(self._on_position)
+        self._player.playbackStateChanged.connect(self._on_state)
+        self._player.errorOccurred.connect(self._on_error)
+        self._err_label = QLabel("", self)
+        self._err_label.setWordWrap(True)
+        self._err_label.setStyleSheet("color:#f0a0a0; font-size:12px;")
+        self._err_label.hide()
+        layout.addWidget(self._err_label)
+        return True
+
+    def _toggle_play(self) -> None:
+        p = getattr(self, "_player", None)
+        if p is None:
+            return
+        if p.playbackState() == QMediaPlayer.PlayingState:
+            p.pause()
+        else:
+            p.play()
+
+    def _on_state(self, state) -> None:
+        self._play_btn.setText("⏸" if state == QMediaPlayer.PlayingState else "▶")
+
+    def _on_duration(self, ms: int) -> None:
+        self._slider.setRange(0, int(ms))
+        self._on_position(self._player.position())
+
+    def _on_position(self, ms: int) -> None:
+        if not self._slider.isSliderDown():
+            self._slider.setValue(int(ms))
+        self._time_label.setText(f"{_fmt_ms(ms)} / {_fmt_ms(self._player.duration())}")
+
+    def _on_error(self, _error, error_string: str = "") -> None:
+        self._err_label.setText(t("panel.video_play_failed", err=error_string or _error))
+        self._err_label.show()
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        p = getattr(self, "_player", None)
+        if p is not None:
+            try:
+                p.stop()
+                p.setSource(QUrl())  # release the file handle
+            except Exception:
+                pass
+        super().closeEvent(event)
+
+    # -- fallback: ffmpeg first-frame thumbnail -------------------------------
+    def _build_thumbnail(self, layout: QVBoxLayout, path: Path) -> None:
+        if HAVE_MM is False:
+            layout.addWidget(QLabel(t("panel.video_need_mm"), self))
+        shown = False
+        ffmpeg = find_ffmpeg()
+        if ffmpeg:
+            try:
+                tmp = Path(tempfile.mkdtemp(prefix="pillow_thumb_")) / "thumb.jpg"
+                subprocess.run([ffmpeg, "-y", "-ss", "1", "-i", str(path),
+                                "-frames:v", "1", "-q:v", "4", str(tmp)],
+                               capture_output=True, timeout=30, check=True)
+                pix = QPixmap(str(tmp))
+                if not pix.isNull():
+                    self._orig = pix
+                    self._img_label = QLabel(self)
+                    self._img_label.setAlignment(Qt.AlignCenter)
+                    self._img_label.setMinimumSize(1, 1)
+                    self._img_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                    layout.addWidget(self._img_label)
+                    shown = True
+            except Exception:
+                pass
+        if not shown:
+            layout.addWidget(QLabel(t("panel.video_need_ffmpeg"), self))
+            layout.addStretch(1)
+
+    def _on_resized(self) -> None:
+        orig = getattr(self, "_orig", None)
+        label = getattr(self, "_img_label", None)
+        if orig is None or label is None or orig.isNull():
+            return
+        size = label.size()
+        if size.width() > 4 and size.height() > 4:
+            label.setPixmap(orig.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def initial_size(self) -> tuple[int, int]:
+        return (720, 620)
