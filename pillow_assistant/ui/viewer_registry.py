@@ -14,7 +14,9 @@ TABLE_EXT = {".csv", ".tsv", ".xlsx", ".xls"}
 DOC_EXT = {".docx", ".doc"}
 PPT_EXT = {".pptx", ".ppt"}
 PDF_EXT = {".pdf"}
-MEDIA_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".mp4", ".mov", ".avi", ".mkv"}
+AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
+VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".mpg", ".mpeg"}
+MEDIA_EXT = AUDIO_EXT | VIDEO_EXT
 ARCHIVE_EXT = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".7z", ".rar"}
 TEXT_EXT = {
     ".txt", ".md", ".markdown", ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
@@ -42,6 +44,8 @@ def classify(path: str | Path) -> str:
         return "table"
     if ext in TEXT_EXT:
         return "code"
+    if ext in VIDEO_EXT:
+        return "video"
     if ext in MEDIA_EXT:
         return "media"
     if ext in ARCHIVE_EXT:
@@ -68,6 +72,7 @@ def resolve(paths: list[str]):
     from pillow_assistant.ui.panels.ppt_panel import PptPanel
     from pillow_assistant.ui.panels.archive_panel import ArchivePanel
     from pillow_assistant.ui.panels.generic_panel import GenericPanel
+    from pillow_assistant.ui.panels.video_panel import VideoPanel
 
     if len(paths) != 1:
         return GenericPanel  # multiple files -> a listing panel
@@ -81,6 +86,7 @@ def resolve(paths: list[str]):
         "code": TextPanel,
         "folder": ArchivePanel,
         "archive": ArchivePanel,
+        "video": VideoPanel,
         "media": GenericPanel,
         "generic": GenericPanel,
     }.get(kind, GenericPanel)

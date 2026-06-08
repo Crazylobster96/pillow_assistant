@@ -274,6 +274,36 @@ _ZH = {
     "tool.ask.timeout": "用户未在限定时间内回答",
     "tool.ask.cancelled": "用户取消了本次提问",
     "tool.ask.answered": "用户回答：{answer}",
+    # -- tools: process_video --------------------------------------------------------------------
+    "tool.vid.desc": "用 ffmpeg 处理视频，让它符合后台模型对时长/大小的要求："
+                     "probe=探测时长/分辨率/大小；split=按时长切成片段（给 segment_seconds，"
+                     "或给 max_mb 自动算每段时长；流复制按关键帧对齐，段长为近似值）；"
+                     "compress=压缩到目标大小（max_mb 必填，可限 max_height，需精确控制大小时用这个）；"
+                     "frames=均匀抽帧成图片（视觉模型只收图片时用）。产物落在项目工作目录。",
+    "tool.vid.path": "视频文件路径（工作目录内或已引用的文件）",
+    "tool.vid.action": "probe / split / compress / frames",
+    "tool.vid.segment_seconds": "split：每段时长（秒），不填且给了 max_mb 时自动计算",
+    "tool.vid.max_mb": "目标大小上限（MB）：compress 必填；split 时用于自动算每段时长",
+    "tool.vid.max_height": "compress：最大输出高度（默认 720）",
+    "tool.vid.frame_count": "frames：抽取帧数（默认 8）",
+    "tool.vid.denied": "不允许访问该路径：{path}",
+    "tool.vid.not_found": "文件不存在：{path}",
+    "tool.vid.no_ffmpeg": "需要 ffmpeg：请安装系统 ffmpeg，或 pip install imageio-ffmpeg",
+    "tool.vid.probe_result": "视频信息：{info}",
+    "tool.vid.split_done": "已切分为 {n} 段（每段约 {seg}s）：{files}",
+    "tool.vid.compress_done": "已压缩为 {name}（{mb} MB，视频码率 {kbps}kbps）",
+    "tool.vid.frames_done": "已抽取 {n} 帧：{files}",
+    "tool.vid.need_max_mb": "compress 需要 max_mb 参数",
+    "tool.vid.no_duration": "无法读取视频时长（需要 ffprobe）",
+    "tool.vid.bad_action": "未知 action：{action}",
+    "tool.vid.failed": "ffmpeg 执行失败：{err}",
+    "tool.vid.timeout": "处理超过 {n}s 被终止",
+    # -- video panel / references ------------------------------------------------------------------
+    "panel.video": "视频",
+    "panel.video_need_ffmpeg": "（安装 ffmpeg 可显示缩略图与时长）",
+    "panel.video_need_mm": "（未安装 QtMultimedia 多媒体组件，仅显示缩略图；pip install PySide6 完整包即可播放）",
+    "panel.video_play_failed": "播放失败：{err}",
+    "refs.video": "视频文件 {path}（{size_mb} MB{extra}）— 如需让模型查看，可用 process_video 探测/切分/压缩/抽帧",
     # -- ask dialog (UI) -------------------------------------------------------------------------
     "ask.title": "需要你确认",
     "ask.input_ph": "在此输入你的回答…",
@@ -526,6 +556,36 @@ _EN = {
     "tool.ask.timeout": "The user did not answer in time",
     "tool.ask.cancelled": "The user cancelled the question",
     "tool.ask.answered": "User answered: {answer}",
+    "tool.vid.desc": "Process a video with ffmpeg so it satisfies the backend model's duration/size "
+                     "limits: probe = duration/resolution/size; split = cut into time segments "
+                     "(give segment_seconds, or max_mb to auto-derive; stream-copy aligns to keyframes "
+                     "so lengths are approximate); compress = shrink to a target size (max_mb required, "
+                     "optional max_height — use this when the size must be exact); frames = extract evenly spaced "
+                     "frames as images (for vision models that only take images). Outputs land in "
+                     "the project workspace.",
+    "tool.vid.path": "video file path (inside the workspace or a referenced file)",
+    "tool.vid.action": "probe / split / compress / frames",
+    "tool.vid.segment_seconds": "split: seconds per segment; auto-derived when omitted and max_mb is given",
+    "tool.vid.max_mb": "target size cap in MB: required for compress; for split it derives the segment length",
+    "tool.vid.max_height": "compress: max output height (default 720)",
+    "tool.vid.frame_count": "frames: number of frames to extract (default 8)",
+    "tool.vid.denied": "Not allowed to access this path: {path}",
+    "tool.vid.not_found": "File not found: {path}",
+    "tool.vid.no_ffmpeg": "ffmpeg required: install system ffmpeg, or pip install imageio-ffmpeg",
+    "tool.vid.probe_result": "Video info: {info}",
+    "tool.vid.split_done": "Split into {n} segments (~{seg}s each): {files}",
+    "tool.vid.compress_done": "Compressed to {name} ({mb} MB, video bitrate {kbps}kbps)",
+    "tool.vid.frames_done": "Extracted {n} frames: {files}",
+    "tool.vid.need_max_mb": "compress requires max_mb",
+    "tool.vid.no_duration": "Could not read the video duration (ffprobe needed)",
+    "tool.vid.bad_action": "Unknown action: {action}",
+    "tool.vid.failed": "ffmpeg failed: {err}",
+    "tool.vid.timeout": "Processing killed after {n}s",
+    "panel.video": "Video",
+    "panel.video_need_ffmpeg": "(install ffmpeg to show a thumbnail and duration)",
+    "panel.video_need_mm": "(QtMultimedia not installed — thumbnail only; install the full PySide6 package for playback)",
+    "panel.video_play_failed": "Playback failed: {err}",
+    "refs.video": "Video file {path} ({size_mb} MB{extra}) — use process_video to probe/split/compress/extract frames for the model",
     "ask.title": "Need your input",
     "ask.input_ph": "Type your answer here…",
     "ask.submit": "Submit",

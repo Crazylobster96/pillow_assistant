@@ -20,6 +20,7 @@ from typing import Iterable
 from pillow_assistant.core.i18n import t
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".mpg", ".mpeg"}
 TEXT_EXT = {
     ".txt", ".md", ".markdown", ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
     ".yaml", ".yml", ".toml", ".ini", ".cfg", ".csv", ".tsv", ".html", ".css",
@@ -61,6 +62,21 @@ def materialize(paths: Iterable[str]) -> tuple[str, list[str]]:
             shown = entries[:MAX_DIR_ENTRIES]
             more = "" if len(entries) <= MAX_DIR_ENTRIES else t("refs.dir_truncated", n=len(entries))
             parts.append(t("refs.dir", path=raw) + "\n".join(shown) + more)
+            continue
+
+        if path.suffix.lower() in VIDEO_EXT:
+            # Surface the path + size and point the model at process_video so it
+            # can probe/split/compress/extract frames per its own input limits.
+            size_mb = round(path.stat().st_size / 1048576, 2)
+            extra = ""
+            try:
+                from pillow_assistant.core.tools.builtin.video_tool import probe
+                info = probe(path)
+                if info.get("duration"):
+                    extra = f"，{info['duration']}s，{info.get('width')}x{info.get('height')}"
+            except Exception:
+                pass
+            parts.append(t("refs.video", path=raw, size_mb=size_mb, extra=extra))
             continue
 
         if is_image(path):
