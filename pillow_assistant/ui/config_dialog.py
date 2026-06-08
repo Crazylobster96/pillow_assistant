@@ -192,4 +192,28 @@ class ModelConfigDialog(QDialog):
         self.display_name_edit.clear()
         self.model_edit.clear()
         self.base_url_edit.clear()
-        self.api_key_ed
+        self.api_key_edit.clear()
+        self.extra_edit.clear()
+        self.provider_combo.setCurrentIndex(0)
+        self.model_type_combo.setCurrentIndex(0)
+
+    def _populate_from_selection(self) -> None:
+        rows = {item.row() for item in self.table.selectedItems()}
+        if len(rows) != 1:
+            return
+        idx = rows.pop()
+        cfg = self.configs[idx]
+        self.provider_combo.setCurrentText(cfg["provider"])
+        self.model_type_combo.setCurrentText(cfg["model_type"])
+        self.display_name_edit.setText(cfg["display_name"])
+        self.model_edit.setText(cfg.get("model") or "")
+        self.base_url_edit.setText(cfg.get("base_url") or "")
+        self.api_key_edit.setText(cfg.get("api_key") or "")
+        self.extra_edit.setPlainText(cfg.get("extra") or "")
+
+    def accept(self) -> None:
+        if not self.configs:
+            QMessageBox.warning(self, t("config.need_one_title"), t("config.need_one"))
+            return
+        self.storage.replace_model_configs(self.configs, self.vault)
+        super().accept()

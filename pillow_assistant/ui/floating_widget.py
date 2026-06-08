@@ -916,4 +916,116 @@ def create_keyboard_icon(size: int) -> QPixmap:
 
     base_border = QPen(QColor(122, 142, 170, 220))
     base_border.setWidthF(max(1.0, size * 0.025))
-    painter.setPen
+    painter.setPen(base_border)
+    painter.setBrush(Qt.NoBrush)
+    painter.drawPath(base_path)
+
+    # Key layout
+    key_radius = size * 0.08
+    key_w = size * 0.15
+    key_h = size * 0.17
+    spacing_x = size * 0.06
+    spacing_y = size * 0.08
+    start_x = base_rect.left() + size * 0.12
+    start_y = base_rect.top() + size * 0.12
+
+    key_border = QPen(QColor(120, 140, 170, 220))
+    key_border.setWidthF(max(0.9, size * 0.018))
+
+    for row in range(2):
+        for col in range(4):
+            x = start_x + col * (key_w + spacing_x)
+            y = start_y + row * (key_h + spacing_y)
+            key_rect = QRectF(x, y, key_w, key_h)
+            key_path = QPainterPath()
+            key_path.addRoundedRect(key_rect, key_radius, key_radius)
+
+            key_gradient = QLinearGradient(QPointF(key_rect.topLeft()), QPointF(key_rect.bottomLeft()))
+            key_gradient.setColorAt(0.0, QColor(255, 255, 255, 255))
+            key_gradient.setColorAt(1.0, QColor(205, 212, 228, 255))
+
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(key_gradient)
+            painter.drawPath(key_path)
+
+            painter.setPen(key_border)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(key_path)
+
+    # Space bar with accent.
+    space_rect = QRectF(
+        base_rect.left() + size * 0.22,
+        base_rect.bottom() - key_h - size * 0.2,
+        base_rect.width() - size * 0.44,
+        key_h * 0.85,
+    )
+    space_path = QPainterPath()
+    space_path.addRoundedRect(space_rect, key_radius, key_radius)
+    space_gradient = QLinearGradient(QPointF(space_rect.topLeft()), QPointF(space_rect.bottomLeft()))
+    space_gradient.setColorAt(0.0, QColor(140, 170, 210, 255))
+    space_gradient.setColorAt(1.0, QColor(90, 130, 190, 255))
+
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(space_gradient)
+    painter.drawPath(space_path)
+
+    space_border = QPen(QColor(70, 100, 150, 230))
+    space_border.setWidthF(max(1.0, size * 0.02))
+    painter.setPen(space_border)
+    painter.setBrush(Qt.NoBrush)
+    painter.drawPath(space_path)
+
+    painter.end()
+    return pixmap
+
+
+def create_close_icon(size: int) -> QPixmap:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+
+    rect = pixmap.rect().adjusted(int(size * 0.08), int(size * 0.08), -int(size * 0.08), -int(size * 0.08))
+    radius = rect.width() / 2
+    center = QPointF(rect.center())
+
+    # Soft dual-tone background.
+    bg_gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+    bg_gradient.setColorAt(0.0, QColor(255, 140, 150, 245))
+    bg_gradient.setColorAt(1.0, QColor(220, 70, 100, 255))
+
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(bg_gradient)
+    painter.drawEllipse(rect)
+
+    # Inner glow ring.
+    ring_pen = QPen(QColor(255, 255, 255, 120))
+    ring_pen.setWidthF(max(1.2, size * 0.04))
+    painter.setPen(ring_pen)
+    painter.setBrush(Qt.NoBrush)
+    painter.drawEllipse(rect.adjusted(int(size * 0.05), int(size * 0.05), -int(size * 0.05), -int(size * 0.05)))
+
+    # Cross mark.
+    cross_pen = QPen(QColor(255, 255, 255, 240))
+    cross_pen.setWidthF(max(2.2, size * 0.14))
+    cross_pen.setCapStyle(Qt.RoundCap)
+    painter.setPen(cross_pen)
+
+    offset = radius * 0.55
+    painter.drawLine(
+        QPointF(center.x() - offset, center.y() - offset),
+        QPointF(center.x() + offset, center.y() + offset),
+    )
+    painter.drawLine(
+        QPointF(center.x() - offset, center.y() + offset),
+        QPointF(center.x() + offset, center.y() - offset),
+    )
+
+    painter.end()
+    return pixmap
+
+
+def is_supported_image(path: str | Path) -> bool:
+    suffix = Path(path).suffix.lower()
+    return suffix in {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}

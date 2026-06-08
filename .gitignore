@@ -66,4 +66,17 @@ config.local.*
 .cache/
 *.cache
 
-# Home directo
+# Home directory files (conda configs)
+.home/
+.condarc
+
+# Logs
+*.log
+
+# Large binary files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp3
+*.wav

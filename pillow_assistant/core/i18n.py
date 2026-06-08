@@ -115,6 +115,7 @@ _ZH = {
     "projects.delete_confirm": "确定删除项目「{name}」吗？\n该项目的对话历史与所有产物文件将被永久删除，无法恢复。",
     "projects.delete_done": "已删除项目「{name}」",
     "projects.delete_failed": "删除失败：{name}",
+    # -- tool: delete_project --------------------------------------------------------------------
     "tool.delproj.desc": "永久删除一个项目（含其对话历史与全部产物文件，不可恢复）。"
                          "用户明确要求删除某个项目时使用；按项目名或 id 定位，多个同名时返回列表让用户确认。",
     "tool.delproj.name": "要删除的项目名称（或项目 id）",

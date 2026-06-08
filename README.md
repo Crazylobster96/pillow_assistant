@@ -186,4 +186,22 @@ Dropped videos play right in the panel. Try: "this video is too big for the mode
 #### Let the Agent configure itself
 
 - "Use qwen2.5 for chat and GPT-4o for images" → `assign_model_role` persists purpose roles (chat/vision/asr) and routing follows automatically; or select a model in Settings and click "**Set as default chat model**";
-- "Hook up llama3 from my local O
+- "Hook up llama3 from my local Ollama" → `configure_model` adds the config;
+- "Set max steps to 100" → `set_max_steps` persists the step budget;
+- "切回中文" / "switch to English" → hot-swaps the UI/prompt language (or set `PILLOW_LANG=zh|en`).
+
+#### More
+
+- **5-second undo**: after the Agent overwrites/creates a file, an undo toast appears next to the icon;
+- **Agent asks back**: when unsure, the Agent pops a choice/input dialog and waits for your call;
+- **Auditing**: every run's steps and tool calls are logged to `audit.jsonl` in the project folder.
+
+### Tests
+
+```bash
+pytest tests/
+```
+
+### Security notes
+
+The sandbox is a guard rail, not a security boundary (use Docker for hard isolation); `run_cli` has a dangerous-command blocklist; HTTP/browser tools reject private/loopback addresses (SSRF); the database stores no credentials.
