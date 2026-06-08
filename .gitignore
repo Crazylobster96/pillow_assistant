@@ -41,6 +41,7 @@ ENV/
 .LSOverride
 
 # Sensitive data - DO NOT COMMIT
+data/
 data/*.db
 data/*.sqlite
 data/*.sqlite3
@@ -49,6 +50,12 @@ storage/*.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Local diagnostics / scratch (not part of the app)
+run_log.txt
+audio_check.txt
+check_audio.py
+sample_sales.csv
 
 # Config with potential secrets
 .env
@@ -59,17 +66,4 @@ config.local.*
 .cache/
 *.cache
 
-# Home directory files (conda configs)
-.home/
-.condarc
-
-# Logs
-*.log
-
-# Large binary files
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.mp3
-*.wav
+# Home directo
