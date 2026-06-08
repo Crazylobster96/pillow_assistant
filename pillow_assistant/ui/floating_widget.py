@@ -470,25 +470,54 @@ class FloatingAssistant(QWidget):
         flipped to the left side when the right edge has no room, and clamped
         on-screen."""
         w.adjustSize()
+        ww, wh = w.width(), w.height()
         fg = self.frameGeometry()
         scr = QGuiApplication.screenAt(fg.center()) or QGuiApplication.primaryScreen()
         g = scr.availableGeometry()
-        x = fg.right() + 12
-        if x + w.width() > g.right():
-            x = max(g.left(), fg.left() - w.width() - 12)
-        y = fg.top() + 4
-        for other in (self._undo_toast, self._ask_dialog, self._surface_win):
+
+        # Every other open window this popup must not overlap.
+        obstacles = []
+        for other in [self._quick, self._panel, self._undo_toast, self._ask_dialog,
+                      self._surface_win] + list(self._multi_wins):
             if other is None or other is w:
                 continue
             try:
                 if other.isVisible():
-                    og = other.frameGeometry()
-                    if abs(og.x() - x) < max(og.width(), w.width()):
-                        y = max(y, og.bottom() + 8)  # stack below, don't overlap
+                    obstacles.append(other.frameGeometry())
             except RuntimeError:
                 continue
-        x = min(max(g.left(), x), max(g.left(), g.right() - w.width()))
-        y = min(max(g.top(), y), max(g.top(), g.bottom() - w.height()))
+
+        def clear_at(x: int) -> int:
+            """Lowest non-overlapping y for column x (push below obstacles)."""
+            y = fg.top() + 4
+            for _ in range(len(obstacles) + 1):
+                cand = QRect(x, y, ww, wh)
+                hit = next((o for o in obstacles if cand.intersects(o)), None)
+                if hit is None:
+                    return y
+                y = hit.bottom() + 8
+            return y
+
+        # Prefer the right of the icon; fall back to the left if it runs off
+        # the right edge; pick whichever side keeps the popup fully on-screen.
+        right_x = fg.right() + 12
+        left_x = fg.left() - ww - 12
+        candidates = []
+        if right_x + ww <= g.right():
+            candidates.append(right_x)
+        if left_x >= g.left():
+            candidates.append(left_x)
+        candidates.append(max(g.left(), min(right_x, g.right() - ww)))  # clamped right
+
+        x = candidates[0]
+        y = clear_at(x)
+        for cx in candidates:  # take the first column that fits vertically
+            cy = clear_at(cx)
+            if cy + wh <= g.bottom():
+                x, y = cx, cy
+                break
+        x = min(max(g.left(), x), max(g.left(), g.right() - ww))
+        y = min(max(g.top(), y), max(g.top(), g.bottom() - wh))
         w.move(x, y)
 
     def _capture_follow_offsets(self) -> None:
@@ -653,13 +682,41 @@ class FloatingAssistant(QWidget):
                 self._projects_win.close()
             except RuntimeError:
                 pass
-        win = ProjectsPanel(self.project_store)
+        current_pid = getattr(self.session, "project_id", None) if self.session is not None else None
+        win = ProjectsPanel(self.project_store, on_switch=self._switch_to_project,
+                            current_project_id=current_pid, on_delete=self._on_project_deleted)
         win.destroyed.connect(lambda *_, w=win: self._on_projects_destroyed(w))
         self._projects_win = win
         win.move(self.frameGeometry().center())
         win.show()
         win.raise_()
         win.activateWindow()
+
+    def _switch_to_project(self, project) -> None:
+        """Bind the current conversation to ``project`` (a Project) or to the
+        one-off chat (``None``), then open a fresh input bar that preloads that
+        thread's recent history."""
+        if self.session is not None:
+            self.session.clear()  # references belonged to the previous context
+            if project is None:
+                self.session.project_id = None
+                self.session.session_id = None
+            else:
+                try:
+                    sessions = self.project_store.list_sessions(project)
+                except Exception:
+                    sessions = []
+                self.session.project_id = project.id
+                self.session.session_id = (sessions[0]["id"] if sessions
+                                           else self.project_store.new_session_id())
+        self._open_quick_input()  # _close_displays + preload history of the new binding
+
+    def _on_project_deleted(self, project_id) -> None:
+        """A project was deleted from the browser: if the current conversation
+        was bound to it, fall back to one-off chat."""
+        if self.session is not None and getattr(self.session, "project_id", None) == project_id:
+            self.session.project_id = None
+            self.session.session_id = None
 
     def _on_projects_destroyed(self, win) -> None:
         if self._projects_win is win:
@@ -859,81 +916,4 @@ def create_keyboard_icon(size: int) -> QPixmap:
 
     base_border = QPen(QColor(122, 142, 170, 220))
     base_border.setWidthF(max(1.0, size * 0.025))
-    painter.setPen(base_border)
-    painter.setBrush(Qt.NoBrush)
-    painter.drawPath(base_path)
-
-    # Key layout
-    key_radius = size * 0.08
-    key_w = size * 0.15
-    key_h = size * 0.17
-    spacing_x = size * 0.06
-    spacing_y = size * 0.08
-    start_x = base_rect.left() + size * 0.12
-    start_y = base_rect.top() + size * 0.12
-
-    key_border = QPen(QColor(120, 140, 170, 220))
-    key_border.setWidthF(max(0.9, size * 0.018))
-
-    for row in range(2):
-        for col in range(4):
-            x = start_x + col * (key_w + spacing_x)
-            y = start_y + row * (key_h + spacing_y)
-            key_rect = QRectF(x, y, key_w, key_h)
-            key_path = QPainterPath()
-            key_path.addRoundedRect(key_rect, key_radius, key_radius)
-
-            key_gradient = QLinearGradient(QPointF(key_rect.topLeft()), QPointF(key_rect.bottomLeft()))
-            key_gradient.setColorAt(0.0, QColor(255, 255, 255, 255))
-            key_gradient.setColorAt(1.0, QColor(205, 212, 228, 255))
-
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(key_gradient)
-            painter.drawPath(key_path)
-
-            painter.setPen(key_border)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPath(key_path)
-
-    # Space bar with accent.
-    space_rect = QRectF(
-        base_rect.left() + size * 0.22,
-        base_rect.bottom() - key_h - size * 0.2,
-        base_rect.width() - size * 0.44,
-        key_h * 0.85,
-    )
-    space_path = QPainterPath()
-    space_path.addRoundedRect(space_rect, key_radius, key_radius)
-    space_gradient = QLinearGradient(QPointF(space_rect.topLeft()), QPointF(space_rect.bottomLeft()))
-    space_gradient.setColorAt(0.0, QColor(140, 170, 210, 255))
-    space_gradient.setColorAt(1.0, QColor(90, 130, 190, 255))
-
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(space_gradient)
-    painter.drawPath(space_path)
-
-    space_border = QPen(QColor(70, 100, 150, 230))
-    space_border.setWidthF(max(1.0, size * 0.02))
-    painter.setPen(space_border)
-    painter.setBrush(Qt.NoBrush)
-    painter.drawPath(space_path)
-
-    painter.end()
-    return pixmap
-
-
-def create_close_icon(size: int) -> QPixmap:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
-
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-
-    rect = pixmap.rect().adjusted(int(size * 0.08), int(size * 0.08), -int(size * 0.08), -int(size * 0.08))
-    radius = rect.width() / 2
-    center = QPointF(rect.center())
-
-    # Soft dual-tone background.
-    bg_gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-    bg_gradient.setColorAt(0.0, QColor(255, 140, 150, 245))
-    bg_g
+    painter.setPen
