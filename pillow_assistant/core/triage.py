@@ -78,9 +78,11 @@ _SYSTEM_ZH = (
     '{"action":"chat"|"continue"|"new","project_id":<continue时填项目id否则null>,'
     '"name":<new时给不超过12字的中文项目名否则null>,"confidence":0~1,"rationale":"简短理由"}\n'
     "判定规则：\n"
-    "- chat：简单的一问一答、闲聊、概念解释、单步小任务，无需建立项目。\n"
-    "- 复杂工作（多步骤、要产出文件、需要持续推进）：若与某个已有项目同源，"
-    "action=continue 并填它的 id；否则 action=new。"
+    "- chat：与已有项目无关的简单一问一答、闲聊、概念解释、单步小任务，无需建立项目。\n"
+    "- continue：若本次请求明显是在延续/追问/修改某个已有项目的工作（即使措辞很短，"
+    "如「继续」「把刚才的表再加一列」「上次那个方案改一下」），就 action=continue 并填该项目 id；"
+    "宁可归到最相关的项目，也不要轻易当 chat 丢掉上下文。\n"
+    "- new：复杂工作（多步骤、要产出文件、需持续推进）且与任何已有项目都不同源时，action=new。"
 )
 
 _SYSTEM_EN = (
@@ -89,9 +91,13 @@ _SYSTEM_EN = (
     '"name":<a short English project name (<=4 words) when new, else null>,'
     '"confidence":0~1,"rationale":"brief reason"}\n'
     "Rules:\n"
-    "- chat: simple Q&A, small talk, concept explanation, single-step micro tasks — no project needed.\n"
-    "- Complex work (multi-step, produces files, ongoing): if it belongs to an existing project, "
-    "action=continue with its id; otherwise action=new."
+    "- chat: simple Q&A / small talk / concept explanation / single-step micro tasks UNRELATED to any "
+    "existing project.\n"
+    "- continue: if the request clearly continues / follows up on / edits an existing project's work "
+    "(even if phrased briefly, e.g. \"continue\", \"add a column to that table\", \"tweak last plan\"), "
+    "set action=continue with that project id; prefer attaching to the most relevant project over "
+    "dropping context as chat.\n"
+    "- new: complex work (multi-step, produces files, ongoing) that matches no existing project → action=new."
 )
 
 

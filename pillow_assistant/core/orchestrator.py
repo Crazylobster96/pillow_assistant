@@ -16,10 +16,14 @@ from pillow_assistant.core.model_router import select_model
 from pillow_assistant.core.observability import AuditLog
 from pillow_assistant.core.tools.base import ToolContext
 from pillow_assistant.core.tools.builtin import build_default_registry
-from pillow_assistant.core.triage import triage
+from pillow_assistant.core.triage import TriageResult, triage
 
 Emit = Callable[[AgentEvent], Awaitable[None]]
 CHAT_MEMORY_TURNS = 12
+# Auto-switch the conversation into a *different* past project only when triage
+# is confident enough; below this it keeps chatting (no switch). 0.8 balances
+# responsiveness against mis-switches (LLM confidence clusters at 0.7/0.8/0.9).
+SWITCH_CONFIDENCE = 0.8
 
 
 class Orchestrator:
@@ -101,7 +105,7 @@ class Orchestrator:
         ctx = ToolContext(workspace=Path(workspace), session=self.pm.session, emit=emit,
                           vault=self.vault, references=list(refs or []), audit=audit,
                           undo_manager=self.undo_manager, request_id=request_id,
-                          storage=self.storage, ask=ask)
+                          storage=self.storage, ask=ask, project_store=self.pm.store)
         # User-adjustable step budget (set_max_steps tool); read per request.
         try:
             from pillow_assistant.core.settings import load_settings
@@ -143,6 +147,18 @@ class Orchestrator:
                 tr = TriageResult(action="continue", project_id=current_id,
                                   confidence=1.0, rationale="resume-pending")
 
+        # Cross-project switch: triage wants to continue a project that is NOT
+        # the one the session is currently bound to (or the session was in
+        # one-off chat). Only switch automatically once confidence is high
+        # (>=SWITCH_CONFIDENCE); below it, keep chatting and don't switch yet —
+        # the conversation stays put until a turn is confident enough, then it
+        # (and this turn) fold into the project.
+        switching = (tr.action == "continue" and tr.project_id
+                     and tr.project_id != current_id)
+        if switching and tr.confidence < SWITCH_CONFIDENCE:
+            tr = TriageResult(action="chat", confidence=tr.confidence,
+                              rationale="switch-below-threshold")
+
         await emit(AgentEvent(request_id=request.id, type=EventType.START))
 
         if tr.is_chat:
@@ -151,8 +167,11 @@ class Orchestrator:
 
         project = self.pm.apply(tr, request.prompt)
         session_id = getattr(self.pm.session, "session_id", None)
-        note = t("core.project_note", name=project.name) + (
-            t("core.project_continue") if tr.action == "continue" else t("core.project_new"))
+        if tr.action == "continue" and project.id != current_id:
+            note = t("core.project_switch", name=project.name)  # genuine switch
+        else:
+            note = t("core.project_note", name=project.name) + (
+                t("core.project_continue") if tr.action == "continue" else t("core.project_new"))
         await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=note + "\n"))
 
         audit = AuditLog(project.root / "audit.jsonl")
