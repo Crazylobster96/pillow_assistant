@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -19,22 +19,33 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from pillow_assistant.core.i18n import t
 from storage import Storage
 
 
 class ModelConfigDialog(QDialog):
-    """Collects model API configuration details and persists them."""
+    """Collects model API configuration details and persists them.
 
-    PROVIDERS = ["OpenAI", "vLLM", "Ollama", "自定义"]
+    Since R0 the API key is stored in the OS keychain (``vault``) keyed by
+    display name, never in the database.
+    """
+
+    PROVIDERS = ["OpenAI", "Anthropic", "vLLM", "Ollama", t("config.custom_provider")]
     MODEL_TYPES = ["llm", "vlm"]
 
-    def __init__(self, storage: Storage, parent=None) -> None:
+    def __init__(self, storage: Storage, vault=None, parent=None) -> None:
         super().__init__(parent)
         self.storage = storage
-        self.setWindowTitle("模型 API 配置")
-        self.resize(640, 520)
+        self.vault = vault
+        self.setWindowTitle(t("config.title"))
+        self.resize(640, 560)
 
+        # In-memory working copy; api_key is hydrated from the vault on demand.
         self.configs: List[dict] = [dict(row) for row in self.storage.list_model_configs()]
+        for cfg in self.configs:
+            cfg.setdefault("model", "")
+            if self.vault is not None:
+                cfg["api_key"] = self.vault.get_secret(cfg.get("display_name", "")) or ""
 
         self._build_ui()
         self._refresh_table()
@@ -48,34 +59,39 @@ class ModelConfigDialog(QDialog):
 
         self.provider_combo = QComboBox(self)
         self.provider_combo.addItems(self.PROVIDERS)
-        form_group.addRow("服务提供商", self.provider_combo)
+        form_group.addRow(t("config.provider"), self.provider_combo)
 
         self.model_type_combo = QComboBox(self)
         self.model_type_combo.addItems(self.MODEL_TYPES)
-        form_group.addRow("模型类型", self.model_type_combo)
+        form_group.addRow(t("config.model_type"), self.model_type_combo)
 
         self.display_name_edit = QLineEdit(self)
-        self.display_name_edit.setPlaceholderText("例如：OpenAI GPT-4")
-        form_group.addRow("显示名称", self.display_name_edit)
+        self.display_name_edit.setPlaceholderText(t("config.display_name_ph"))
+        form_group.addRow(t("config.display_name"), self.display_name_edit)
+
+        self.model_edit = QLineEdit(self)
+        self.model_edit.setPlaceholderText(t("config.model_name_ph"))
+        form_group.addRow(t("config.model_name"), self.model_edit)
 
         self.base_url_edit = QLineEdit(self)
-        self.base_url_edit.setPlaceholderText("例如：https://api.openai.com/v1")
-        form_group.addRow("接口地址", self.base_url_edit)
+        self.base_url_edit.setPlaceholderText(t("config.base_url_ph"))
+        form_group.addRow(t("config.base_url"), self.base_url_edit)
 
         self.api_key_edit = QLineEdit(self)
-        self.api_key_edit.setPlaceholderText("用于鉴权的 API Key")
+        self.api_key_edit.setPlaceholderText(t("config.api_key_ph"))
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         form_group.addRow("API Key", self.api_key_edit)
 
         self.extra_edit = QTextEdit(self)
-        self.extra_edit.setPlaceholderText("额外参数（JSON 字符串，可选）")
-        form_group.addRow("额外参数", self.extra_edit)
+        self.extra_edit.setPlaceholderText(t("config.extra_ph"))
+        self.extra_edit.setFixedHeight(70)
+        form_group.addRow(t("config.extra"), self.extra_edit)
 
         layout.addLayout(form_group)
 
         button_row = QHBoxLayout()
-        self.add_button = QPushButton("添加/更新", self)
-        self.remove_button = QPushButton("删除选中", self)
+        self.add_button = QPushButton(t("config.add"), self)
+        self.remove_button = QPushButton(t("config.remove"), self)
         button_row.addWidget(self.add_button)
         button_row.addWidget(self.remove_button)
         button_row.addStretch(1)
@@ -83,13 +99,15 @@ class ModelConfigDialog(QDialog):
 
         self.table = QTableWidget(0, 5, self)
         self.table.setHorizontalHeaderLabels(
-            ["显示名称", "提供商", "模型类型", "接口地址", "额外参数"]
+            [t("config.display_name"), t("config.provider"), t("config.model_type"),
+             t("config.model_name"), t("config.base_url")]
         )
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
-        hint = QLabel("提示：模型类型用于区分文本模型 (llm) 与多模态模型 (vlm)。")
+        hint = QLabel(t("config.hint"))
         hint.setStyleSheet("color: gray; font-size: 12px;")
+        hint.setWordWrap(True)
         layout.addWidget(hint)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self)
@@ -104,13 +122,14 @@ class ModelConfigDialog(QDialog):
     def _add_or_update_config(self) -> None:
         display_name = self.display_name_edit.text().strip()
         if not display_name:
-            QMessageBox.warning(self, "缺少信息", "请填写显示名称。")
+            QMessageBox.warning(self, t("config.missing_title"), t("config.missing_name"))
             return
 
         payload = {
             "provider": self.provider_combo.currentText(),
             "model_type": self.model_type_combo.currentText(),
             "display_name": display_name,
+            "model": self.model_edit.text().strip() or None,
             "base_url": self.base_url_edit.text().strip() or None,
             "api_key": self.api_key_edit.text().strip() or None,
             "extra": self.extra_edit.toPlainText().strip() or None,
@@ -118,6 +137,9 @@ class ModelConfigDialog(QDialog):
 
         for idx, existing in enumerate(self.configs):
             if existing["display_name"] == display_name:
+                # Preserve an existing key if the field was left blank.
+                if not payload["api_key"]:
+                    payload["api_key"] = existing.get("api_key")
                 self.configs[idx] = payload
                 break
         else:
@@ -141,11 +163,12 @@ class ModelConfigDialog(QDialog):
             self.table.setItem(row_idx, 0, QTableWidgetItem(cfg["display_name"]))
             self.table.setItem(row_idx, 1, QTableWidgetItem(cfg["provider"]))
             self.table.setItem(row_idx, 2, QTableWidgetItem(cfg["model_type"]))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(cfg.get("base_url") or ""))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(cfg.get("extra") or ""))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(cfg.get("model") or ""))
+            self.table.setItem(row_idx, 4, QTableWidgetItem(cfg.get("base_url") or ""))
 
     def _clear_form(self) -> None:
         self.display_name_edit.clear()
+        self.model_edit.clear()
         self.base_url_edit.clear()
         self.api_key_edit.clear()
         self.extra_edit.clear()
@@ -161,14 +184,14 @@ class ModelConfigDialog(QDialog):
         self.provider_combo.setCurrentText(cfg["provider"])
         self.model_type_combo.setCurrentText(cfg["model_type"])
         self.display_name_edit.setText(cfg["display_name"])
+        self.model_edit.setText(cfg.get("model") or "")
         self.base_url_edit.setText(cfg.get("base_url") or "")
         self.api_key_edit.setText(cfg.get("api_key") or "")
         self.extra_edit.setPlainText(cfg.get("extra") or "")
 
     def accept(self) -> None:
         if not self.configs:
-            QMessageBox.warning(self, "缺少配置", "请至少添加一个模型配置。")
+            QMessageBox.warning(self, t("config.need_one_title"), t("config.need_one"))
             return
-        self.storage.replace_model_configs(self.configs)
+        self.storage.replace_model_configs(self.configs, self.vault)
         super().accept()
-
