@@ -52,6 +52,8 @@ python -m pillow_assistant.main
 
 每次提问会自动**三分分诊**：闲聊/简单问题走「单次对话」（不建项目）；复杂工作自动新建**项目**或延续同源的已有项目。项目存放在 `~/.pillow/projects/<id>/`，含元数据、产物目录（workspace）和多会话对话历史；历史自动喂给 Agent，「继续上次的任务」可增量推进。右键 → 项目可浏览项目列表、历史与产物文件夹。
 
+Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示，回复「继续」可**保留现场续跑**（包括之前所有工具调用结果，再获完整步数预算）。说「把最大步数调到 100」即可持久调整（1–500）。
+
 #### 文件问答
 
 把文件拖到图标上，按类型打开预览面板：图片（随窗缩放）、表格、Word（富文本）、PPT、PDF、代码/文本、视频（内置播放器：播放/暂停/进度条）、文件夹（目录树）。面板通用操作：
@@ -71,8 +73,9 @@ python -m pillow_assistant.main
 
 #### 让 Agent 配置自己
 
-- 「把 qwen2.5 设为对话模型，看图用 GPT-4o」→ Agent 调 `assign_model_role` 持久化角色（chat/vision/asr），后续请求自动路由；
+- 「把 qwen2.5 设为对话模型，看图用 GPT-4o」→ Agent 调 `assign_model_role` 持久化角色（chat/vision/asr），后续请求自动路由；也可在配置窗口选中模型后点「**设为默认对话模型**」；
 - 「帮我接入本地 Ollama 的 llama3」→ Agent 调 `configure_model` 新增配置；
+- 「把最大步数调到 100」→ `set_max_steps` 持久化步数预算；
 - 「switch to English」/「切回中文」→ 界面与提示语言热切换（也可用环境变量 `PILLOW_LANG=zh|en`）。
 
 #### 其它
@@ -141,6 +144,8 @@ Click the icon to open the input bar: pick a model → type → Enter; answers s
 
 Every request is **triaged three ways**: small talk / simple questions run as one-off chat (no project); complex work creates a **project** or continues a related existing one. Projects live in `~/.pillow/projects/<id>/` with metadata, an artifacts workspace and multi-session history; history is fed back to the Agent so "continue where we left off" just works. Right-click → Projects to browse them.
 
+Each run has a tool-step budget (default **50**). When exhausted, the Agent pauses — reply "continue" to **resume with the full transcript** (all prior tool results kept, fresh budget granted). Say "set max steps to 100" to adjust persistently (1–500).
+
 #### Asking about files
 
 Drop a file onto the icon to open its preview: image (fit-to-window), table, Word (rich text), PPT, PDF, code/text, video (built-in player with play/pause/seek), or a folder tree. Panel basics:
@@ -160,22 +165,5 @@ Dropped videos play right in the panel. Try: "this video is too big for the mode
 
 #### Let the Agent configure itself
 
-- "Use qwen2.5 for chat and GPT-4o for images" → `assign_model_role` persists purpose roles (chat/vision/asr) and routing follows automatically;
-- "Hook up llama3 from my local Ollama" → `configure_model` adds the config;
-- "切回中文" / "switch to English" → hot-swaps the UI/prompt language (or set `PILLOW_LANG=zh|en`).
-
-#### More
-
-- **5-second undo**: after the Agent overwrites/creates a file, an undo toast appears next to the icon;
-- **Agent asks back**: when unsure, the Agent pops a choice/input dialog and waits for your call;
-- **Auditing**: every run's steps and tool calls are logged to `audit.jsonl` in the project folder.
-
-### Tests
-
-```bash
-pytest tests/
-```
-
-### Security notes
-
-The sandbox is a guard rail, not a security boundary (use Docker for hard isolation); `run_cli` has a dangerous-command blocklist; HTTP/browser tools reject private/loopback addresses (SSRF); the database stores no credentials.
+- "Use qwen2.5 for chat and GPT-4o for images" → `assign_model_role` persists purpose roles (chat/vision/asr) and routing follows automatically; or select a model in Settings and click "**Set as default chat model**";
+- "Hook up llama3 from my local O
