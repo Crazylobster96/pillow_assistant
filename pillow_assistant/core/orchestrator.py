@@ -23,7 +23,7 @@ CHAT_MEMORY_TURNS = 12
 
 
 class Orchestrator:
-    def __init__(self, storage: Any, vault: Any, project_manager: Any, max_steps: int = 6,
+    def __init__(self, storage: Any, vault: Any, project_manager: Any, max_steps: int = 50,
                  undo_manager: Any = None, ask_broker: Any = None) -> None:
         self.storage = storage
         self.vault = vault
@@ -33,6 +33,10 @@ class Orchestrator:
         self.ask_broker = ask_broker
         self.registry = build_default_registry()
         self._chat_history: list[dict] = self._load_chat_history()
+        # Paused transcripts of runs that hit the step limit, keyed by
+        # (project_id, session_id) or "chat" — replying「继续」resumes them
+        # with the full tool-call context (in-memory, cleared on use).
+        self._resume_state: dict = {}
         self._mcp_loaded = False
         self._register_skills()
 
@@ -98,8 +102,15 @@ class Orchestrator:
                           vault=self.vault, references=list(refs or []), audit=audit,
                           undo_manager=self.undo_manager, request_id=request_id,
                           storage=self.storage, ask=ask)
+        # User-adjustable step budget (set_max_steps tool); read per request.
+        try:
+            from pillow_assistant.core.settings import load_settings
+            steps = int(load_settings().get("max_steps") or self.max_steps)
+            steps = max(1, min(steps, 500))
+        except Exception:
+            steps = self.max_steps
         return ToolLoopAgent(cfg=cfg, api_key=api_key, registry=self.registry, ctx=ctx,
-                             max_steps=self.max_steps)
+                             max_steps=steps)
 
     async def __call__(self, request: AppRequest, emit: Emit) -> None:
         configs = self.storage.list_model_configs()
@@ -123,6 +134,15 @@ class Orchestrator:
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session else None
         tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id)
 
+        # A paused (step-limited) run takes precedence over triage for short
+        # follow-ups like「继续」: route back to the project holding the state.
+        if tr.is_chat and current_id is not None:
+            sid = getattr(self.pm.session, "session_id", None)
+            if (current_id, sid) in self._resume_state:
+                from pillow_assistant.core.triage import TriageResult
+                tr = TriageResult(action="continue", project_id=current_id,
+                                  confidence=1.0, rationale="resume-pending")
+
         await emit(AgentEvent(request_id=request.id, type=EventType.START))
 
         if tr.is_chat:
@@ -140,10 +160,14 @@ class Orchestrator:
         history = self.pm.store.load_history(project, session_id)
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
                             request_id=request.id)
+        resume_key = (project.id, session_id)
         final_text = await agent.run(
             prompt=request.prompt, emit=emit, request_id=request.id,
             context=context_text, image_paths=image_paths or None, history=history,
+            resume_messages=self._resume_state.pop(resume_key, None),
         )
+        if getattr(agent, "reached_limit", False):
+            self._resume_state[resume_key] = agent.final_messages
         audit.run_end(len(final_text))
         self.pm.store.record_turn(project, session_id, request.prompt, final_text)
 
@@ -159,7 +183,10 @@ class Orchestrator:
             prompt=request.prompt, emit=emit, request_id=request.id,
             context=context_text, image_paths=image_paths or None,
             history=list(self._chat_history),
+            resume_messages=self._resume_state.pop("chat", None),
         )
+        if getattr(agent, "reached_limit", False):
+            self._resume_state["chat"] = agent.final_messages
         audit.run_end(len(final_text))
         self._chat_history.append({"role": "user", "content": request.prompt})
         self._chat_history.append({"role": "assistant", "content": final_text})

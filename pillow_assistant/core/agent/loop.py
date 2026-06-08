@@ -35,6 +35,7 @@ class ToolLoopAgent:
         context: str = "",
         image_paths: Optional[list[str]] = None,
         history: Optional[list[dict]] = None,
+        resume_messages: Optional[list[dict]] = None,
     ) -> str:
         provider = self.cfg.get("provider", "")
         model = self.cfg.get("model") or ""
@@ -43,19 +44,26 @@ class ToolLoopAgent:
         tools = self.registry.schemas()
 
         user_text = f"{context}\n\n{prompt}" if context else prompt
-        messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        if history:
-            messages.extend({"role": t["role"], "content": t["content"]} for t in history)
-        if image_paths:
-            content: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
-            for p in image_paths:
-                content.append({"type": "image_url", "image_url": {"url": llm.encode_image_data_url(p)}})
-            messages.append({"role": "user", "content": content})
-        else:
+        if resume_messages:
+            # Continue an interrupted run (hit the step limit last time): keep
+            # the full transcript incl. tool calls/results, append the new ask.
+            messages: list[dict[str, Any]] = list(resume_messages)
             messages.append({"role": "user", "content": user_text})
+        else:
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            if history:
+                messages.extend({"role": t["role"], "content": t["content"]} for t in history)
+            if image_paths:
+                content: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
+                for p in image_paths:
+                    content.append({"type": "image_url", "image_url": {"url": llm.encode_image_data_url(p)}})
+                messages.append({"role": "user", "content": content})
+            else:
+                messages.append({"role": "user", "content": user_text})
 
         final_text = ""
         reached_limit = True
+        used_tools = False
         self._artifacts: list[str] = []
         for _ in range(self.max_steps):
             turn = await llm.complete_with_tools(
@@ -65,9 +73,14 @@ class ToolLoopAgent:
             if not turn.tool_calls:
                 final_text = turn.content or ""
                 if final_text:
+                    if used_tools:
+                        # Visually separate the answer from the tool-call noise.
+                        await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN,
+                                              text=t("core.answer_sep")))
                     await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=final_text))
                 reached_limit = False
                 break
+            used_tools = True
 
             messages.append({
                 "role": "assistant",
@@ -81,6 +94,11 @@ class ToolLoopAgent:
             for tc in turn.tool_calls:
                 result_text = await self._run_tool(tc, emit, request_id)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_text})
+
+        # Expose the run's end state so the orchestrator can offer "继续":
+        # on limit it stores the transcript and resumes from it next request.
+        self.reached_limit = reached_limit
+        self.final_messages = list(messages)
 
         if reached_limit:
             note = t("core.max_steps")

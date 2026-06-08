@@ -149,6 +149,28 @@ class AssignModelRoleTool:
         return ToolResult(ok=True, text=t("tool.ar.saved", role=role, value=value))
 
 
+class SetMaxStepsTool:
+    name = "set_max_steps"
+    permission = Permission.SYSTEM
+    description = t("tool.steps.desc")
+    parameters = {
+        "type": "object",
+        "properties": {"steps": {"type": "integer", "description": t("tool.steps.steps")}},
+        "required": ["steps"],
+    }
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        try:
+            steps = int(args.get("steps"))
+        except (TypeError, ValueError):
+            return ToolResult(ok=False, text=t("tool.steps.bad", v=args.get("steps")))
+        if not (1 <= steps <= 500):
+            return ToolResult(ok=False, text=t("tool.steps.bad", v=steps))
+        from pillow_assistant.core.settings import set_setting
+        set_setting("max_steps", steps)
+        return ToolResult(ok=True, text=t("tool.steps.done", n=steps))
+
+
 class SetLanguageTool:
     name = "set_language"
     permission = Permission.SYSTEM
