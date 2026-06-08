@@ -54,6 +54,16 @@ python -m pillow_assistant.main
 
 Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示，回复「继续」可**保留现场续跑**（包括之前所有工具调用结果，再获完整步数预算）。说「把最大步数调到 100」即可持久调整（1–500）。
 
+#### 项目自动切换与聊天的关系
+
+每轮对话都会自动分诊，决定它属于当前项目、属于过去的某个项目，还是只是一次无关闲聊：
+
+- **属于某个过去的项目**：当判断这句话明显是在延续/追问/修改某个已有项目的工作、且置信度 ≥ 0.8 时，会**自动把对话切换到那个项目**继续（顶部提示「🔀 已切换到项目 X 继续」），这一轮及后续都在该项目里推进。置信度未达 0.8 时不切换，继续当前对话，直到某一轮足够有把握再切。
+- **在项目里说无关的话**：当前会话仍**停留在该项目**，不会被切出去；这句无关的话只作为一次性闲聊就地回答（顶部显示「💬 对话」），**不写入项目历史、不影响项目产物**。下一句只要和项目相关，就继续在原项目推进。
+- **手动控制**：右键 → 项目，可双击或点「切换到此项目对话」手动切换；也可切到「💬 单次对话」回到不归属任何项目的聊天。
+
+简单说：相关的话自动归并进对应项目，无关的闲聊就地答掉而不离开当前项目，分类拿不准时倾向于稳在当前对话。
+
 #### 文件问答
 
 把文件拖到图标上，按类型打开预览面板：图片（随窗缩放）、表格、Word（富文本）、PPT、PDF、代码/文本、视频（内置播放器：播放/暂停/进度条）、文件夹（目录树）。面板通用操作：
@@ -145,6 +155,16 @@ Click the icon to open the input bar: pick a model → type → Enter; answers s
 Every request is **triaged three ways**: small talk / simple questions run as one-off chat (no project); complex work creates a **project** or continues a related existing one. Projects live in `~/.pillow/projects/<id>/` with metadata, an artifacts workspace and multi-session history; history is fed back to the Agent so "continue where we left off" just works. Right-click → Projects to browse them.
 
 Each run has a tool-step budget (default **50**). When exhausted, the Agent pauses — reply "continue" to **resume with the full transcript** (all prior tool results kept, fresh budget granted). Say "set max steps to 100" to adjust persistently (1–500).
+
+#### Auto project-switching and its relationship with chat
+
+Every turn is triaged to decide whether it belongs to the current project, to a past project, or is just unrelated small talk:
+
+- **Belongs to a past project**: when a turn clearly continues / follows up on / edits an existing project's work with confidence ≥ 0.8, the conversation **switches into that project automatically** (a "🔀 Switched to project X" note appears) and continues there. Below 0.8 it does not switch — it keeps chatting until a turn is confident enough.
+- **Unrelated talk inside a project**: the session **stays in the current project**; the unrelated turn is answered as a one-off chat (a "💬 Chat" note) and is **not written into the project history or artifacts**. The next project-related message simply continues the project.
+- **Manual control**: right-click → Projects to double-click or "Switch chat to this project"; or switch to "💬 One-off chat" to leave any project binding.
+
+In short: related turns fold into the right project automatically, unrelated small talk is answered in place without leaving the current project, and when the classification is uncertain it prefers to stay put.
 
 #### Asking about files
 
