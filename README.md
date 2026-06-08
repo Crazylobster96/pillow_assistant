@@ -8,11 +8,25 @@
 
 一个「弱 UI、强 Agent」的本地桌面 AI 助手：屏幕上只有一枚半透明的枕头图标，所有能力都从它出发。纯 Python（PySide6）单技术栈，数据与执行 100% 在本机，API Key 存操作系统密钥库，绝不落盘明文。
 
-### 快速开始
+### 安装与启动
+
+作为 pip 包安装（推荐），会得到一个 `pillow-assistant` 命令。基础安装只含运行所需的最小依赖，其余按需通过 extras 选装（缺失时自动降级，不影响其它功能）：
+
+```bash
+pip install .                         # 基础：对话 + 本地 Agent
+pip install ".[all]"                  # 全功能一次装齐
+pip install ".[previews,asr,video]"   # 按需组合（文件预览 / 语音转写 / 视频处理）
+
+pillow-assistant                      # 启动（等同 python -m pillow_assistant）
+```
+
+可选 extras：`sandbox`（pandas/matplotlib，Agent 数据与画图）、`voice`（录音）、`asr`（SenseVoice 中文语音转写）、`asr-whisper`（faster-whisper 回退）、`previews`（PDF/Excel/Word/PPT 预览）、`video`（视频切分/压缩/抽帧，也可直接装系统 ffmpeg）、`browser`（Playwright 取网页）、`mcp`（挂载外部 MCP server）、`all`（全部）。
+
+开发态运行（不安装）：
 
 ```bash
 pip install -r requirements.txt
-python -m pillow_assistant.main
+python -m pillow_assistant
 ```
 
 首次运行会弹出「模型 API 配置」窗口：
@@ -110,11 +124,25 @@ pytest tests/
 
 A local desktop AI assistant with a "minimal UI, powerful Agent" design: a single translucent pillow icon on your screen is the entry point to everything. Pure Python (PySide6), all data and execution stay 100% on your machine, and API keys live in the OS keyring — never written to disk in plain text.
 
-### Quick start
+### Install & run
+
+Install as a pip package (recommended) — you get a `pillow-assistant` command. The base install carries only the minimal runtime; everything else is opt-in via extras (missing extras degrade gracefully):
+
+```bash
+pip install .                         # base: chat + local Agent
+pip install ".[all]"                  # everything at once
+pip install ".[previews,asr,video]"   # mix and match (previews / speech-to-text / video)
+
+pillow-assistant                      # launch (same as python -m pillow_assistant)
+```
+
+Extras: `sandbox` (pandas/matplotlib for Agent data + charts), `voice` (recording), `asr` (SenseVoice Chinese STT), `asr-whisper` (faster-whisper fallback), `previews` (PDF/Excel/Word/PPT), `video` (split/compress/extract frames; system ffmpeg also works), `browser` (Playwright), `mcp` (external MCP servers), `all`.
+
+Run from source without installing:
 
 ```bash
 pip install -r requirements.txt
-python -m pillow_assistant.main
+python -m pillow_assistant
 ```
 
 The first run opens the **Model API Settings** dialog:
