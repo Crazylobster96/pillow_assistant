@@ -128,4 +128,45 @@ class AskDialog(QWidget):
     def _answer(self, text: str) -> None:
         if self._answered:
             return
-        self._
+        self._answered = True
+        try:
+            self._on_answer({"answer": text, "cancelled": False})
+        finally:
+            self.close()
+
+    def _cancel(self) -> None:
+        if self._answered:
+            return
+        self._answered = True
+        try:
+            self._on_answer({"answer": "", "cancelled": True})
+        finally:
+            self.close()
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        # If closed by other means (X, parent teardown), report a cancel once.
+        if not self._answered:
+            self._answered = True
+            try:
+                self._on_answer({"answer": "", "cancelled": True})
+            except Exception:
+                pass
+        super().closeEvent(event)
+
+    # -- move / dismiss -----------------------------------------------------
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_offset is not None and (event.buttons() & Qt.LeftButton):
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._drag_offset = None
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key_Escape:
+            self._cancel()
+            return
+        super().keyPressEvent(event)

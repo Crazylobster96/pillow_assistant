@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pillow-assistant"
+version = "0.1.0"
+description = "瞌睡送枕头 · 一个「弱 UI、强 Agent」的本地桌面 AI 助手 / A minimal-UI, powerful-Agent local desktop AI assistant"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "lobster", email = "crazylobster96@gmail.com" }]
+keywords = ["agent", "desktop", "assistant", "llm", "pyside6", "local-ai"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+
+# Minimal runtime needed to launch and do text/agent work. Everything else is an
+# optional extra so the base install stays small; missing extras degrade
+# gracefully at runtime.
+dependencies = [
+    "PySide6>=6.6",
+    "pydantic>=2.6",
+    "litellm>=1.40",
+    "keyring>=24.0",
+    "numpy>=1.23",
+]
+
+[project.optional-dependencies]
+# Agent sandbox tasks (data wrangling + charts).
+sandbox = ["pandas>=2.0", "matplotlib>=3.7"]
+# Long-press voice recording.
+voice = ["sounddevice>=0.4.6"]
+# Speech-to-text backends (SenseVoice preferred for Chinese; Whisper fallback).
+asr = ["funasr>=1.1", "torch>=2.0", "torchaudio>=2.0"]
+asr-whisper = ["faster-whisper>=1.0"]
+# Richer file previews.
+previews = ["pymupdf>=1.23", "openpyxl>=3.1", "python-docx>=1.1", "python-pptx>=0.6", "mammoth>=1.6"]
+# Video processing helper binary (system ffmpeg also works without this).
+video = ["imageio-ffmpeg>=0.4"]
+# Headless browser tool (run `playwright install chromium` after installing).
+browser = ["playwright>=1.40"]
+# Mount external MCP servers' tools.
+mcp = ["mcp>=1.0"]
+# Everything at once.
+all = [
+    "pandas>=2.0", "matplotlib>=3.7", "sounddevice>=0.4.6",
+    "funasr>=1.1", "torch>=2.0", "torchaudio>=2.0", "faster-whisper>=1.0",
+    "pymupdf>=1.23", "openpyxl>=3.1", "python-docx>=1.1", "python-pptx>=0.6", "mammoth>=1.6",
+    "imageio-ffmpeg>=0.4", "playwright>=1.40", "mcp>=1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Crazylobster96/pillow_assistant"
+
+[project.scripts]
+pillow-assistant = "pillow_assistant.app:main"
+
+[tool.setuptools]
+# The project ships two top-level import packages: the app and its storage
+# layer (kept separate from R0; `from storage import ...`).
+packages = [
+    "pillow_assistant",
+    "pillow_assistant.core",
+    "pillow_assistant.core.agent",
+    "pillow_assistant.core.tools",
+    "pillow_assistant.core.tools.builtin",
+    "pillow_assistant.ui",
+    "pillow_assistant.ui.panels",
+    "pillow_assistant.tools",
+    "storage",
+]

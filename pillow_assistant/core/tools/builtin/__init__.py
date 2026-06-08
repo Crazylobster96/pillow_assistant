@@ -37,3 +37,7 @@ def build_default_registry() -> ToolRegistry:
     reg.register(AssignModelRoleTool())
     reg.register(SetLanguageTool())
     reg.register(SetMaxStepsTool())
+    reg.register(AskUserTool())
+    reg.register(ProcessVideoTool())
+    reg.register(DeleteProjectTool())
+    return reg

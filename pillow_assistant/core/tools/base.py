@@ -54,4 +54,6 @@ class Tool(Protocol):
     name: str
     description: str
     parameters: dict
-    permis
+    permission: Permission
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult: ...
