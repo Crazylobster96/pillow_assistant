@@ -25,5 +25,11 @@ class SkillTool:
         skill = self._skills.get(name)
         if skill is None:
             return ToolResult(ok=False, text=t("tool.skill.not_found", name=name))
+        # Nested skills are already inlined into resolved_instructions; surface
+        # which sub-skills were merged so the model knows the scope.
+        instructions = getattr(skill, "resolved_instructions", "") or skill.instructions
+        children = getattr(skill, "children", None)
+        if children:
+            instructions = t("tool.skill.merged", names="、".join(children)) + "\n\n" + instructions
         return ToolResult(ok=True, text=t("tool.skill.applied", name=skill.name,
-                                          instructions=skill.instructions))
+                                          instructions=instructions))

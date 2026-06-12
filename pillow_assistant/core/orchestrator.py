@@ -24,6 +24,9 @@ CHAT_MEMORY_TURNS = 12
 # is confident enough; below this it keeps chatting (no switch). 0.8 balances
 # responsiveness against mis-switches (LLM confidence clusters at 0.7/0.8/0.9).
 SWITCH_CONFIDENCE = 0.8
+# Switching *away* from a project you're actively working in is riskier (it can
+# orphan the thread), so it needs a higher bar than attaching from one-off chat.
+SWITCH_AWAY_CONFIDENCE = 0.9
 
 
 class Orchestrator:
@@ -155,9 +158,18 @@ class Orchestrator:
         # (and this turn) fold into the project.
         switching = (tr.action == "continue" and tr.project_id
                      and tr.project_id != current_id)
-        if switching and tr.confidence < SWITCH_CONFIDENCE:
-            tr = TriageResult(action="chat", confidence=tr.confidence,
-                              rationale="switch-below-threshold")
+        if switching:
+            threshold = SWITCH_AWAY_CONFIDENCE if current_id else SWITCH_CONFIDENCE
+            if tr.confidence < threshold:
+                if current_id:
+                    # Not confident enough to leave the active project — stay in
+                    # it and keep its history, rather than drifting away.
+                    tr = TriageResult(action="continue", project_id=current_id,
+                                      confidence=tr.confidence, rationale="stay-in-current")
+                else:
+                    # From one-off chat: keep chatting until confident enough.
+                    tr = TriageResult(action="chat", confidence=tr.confidence,
+                                      rationale="switch-below-threshold")
 
         await emit(AgentEvent(request_id=request.id, type=EventType.START))
 
@@ -176,7 +188,10 @@ class Orchestrator:
 
         audit = AuditLog(project.root / "audit.jsonl")
         audit.run_start(request.prompt)
-        history = self.pm.store.load_history(project, session_id)
+        # Load the project's recent history ACROSS sessions (session_id=None),
+        # not just the current session. A switch / new session must never make
+        # the Agent lose the project's accumulated context.
+        history = self.pm.store.load_history(project)
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
                             request_id=request.id)
         resume_key = (project.id, session_id)

@@ -59,7 +59,14 @@ class ProjectManager:
             if project is not None:
                 self.store.touch(project)
                 if s is not None:
-                    if s.project_id != project.id or not getattr(s, "session_id", None):
+                    if s.project_id != project.id:
+                        # Switching into a (different) project: resume its most
+                        # recent session so its history is immediately in
+                        # context — don't start an empty session that makes the
+                        # history look lost.
+                        sessions = self.store.list_sessions(project)
+                        s.session_id = sessions[0]["id"] if sessions else self.store.new_session_id()
+                    elif not getattr(s, "session_id", None):
                         s.session_id = self.store.new_session_id()
                     s.project_id = project.id
                 return project
