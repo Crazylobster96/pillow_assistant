@@ -32,6 +32,7 @@ class Project:
     created_at: float
     updated_at: float
     last_prompt: str = ""
+    unfinished: bool = False   # last run hit the step limit (work left to resume)
 
     @property
     def workspace(self) -> Path:
@@ -68,7 +69,7 @@ class ProjectStore:
             json.dumps(
                 {"id": project.id, "name": project.name,
                  "created_at": project.created_at, "updated_at": project.updated_at,
-                 "last_prompt": project.last_prompt},
+                 "last_prompt": project.last_prompt, "unfinished": project.unfinished},
                 ensure_ascii=False, indent=2,
             ),
             encoding="utf-8",
@@ -85,7 +86,7 @@ class ProjectStore:
         return Project(
             id=data["id"], name=data.get("name", data["id"]), root=root,
             created_at=data.get("created_at", 0.0), updated_at=data.get("updated_at", 0.0),
-            last_prompt=data.get("last_prompt", ""),
+            last_prompt=data.get("last_prompt", ""), unfinished=bool(data.get("unfinished", False)),
         )
 
     def get(self, project_id: Optional[str]) -> Optional[Project]:
@@ -100,6 +101,13 @@ class ProjectStore:
 
     def touch(self, project: Project) -> None:
         project.updated_at = time.time()
+        self._write(project)
+
+    def set_unfinished(self, project: Project, value: bool) -> None:
+        """Mark whether the project has work left to resume (hit step limit)."""
+        if project.unfinished == value:
+            return
+        project.unfinished = value
         self._write(project)
 
     def rename(self, project_id: str, name: str) -> Optional[Project]:

@@ -200,8 +200,12 @@ class Orchestrator:
             context=context_text, image_paths=image_paths or None, history=history,
             resume_messages=self._resume_state.pop(resume_key, None),
         )
-        if getattr(agent, "reached_limit", False):
+        hit_limit = bool(getattr(agent, "reached_limit", False))
+        if hit_limit:
             self._resume_state[resume_key] = agent.final_messages
+        # Persist whether this project has work left to resume, so the project
+        # browser can show which projects are still in progress.
+        self.pm.store.set_unfinished(project, hit_limit)
         audit.run_end(len(final_text))
         self.pm.store.record_turn(project, session_id, request.prompt, final_text)
 

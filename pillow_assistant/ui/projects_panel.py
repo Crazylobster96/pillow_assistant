@@ -199,7 +199,11 @@ class ProjectsPanel(QWidget):
         self._projects = self.store.list()
         self._chat_path = Path.home() / ".pillow" / "chat" / "history.jsonl"
         self._has_chat = self._chat_path.exists()
-        self.title.setText(f"{t('projects.title')} · {t('projects.count', n=len(self._projects))}")
+        title = f"{t('projects.title')} · {t('projects.count', n=len(self._projects))}"
+        in_prog = sum(1 for p in self._projects if getattr(p, "unfinished", False))
+        if in_prog:
+            title += " · " + t("projects.in_progress_count", m=in_prog)
+        self.title.setText(title)
 
         if self._has_chat:
             when = time.strftime("%m-%d %H:%M", time.localtime(self._chat_path.stat().st_mtime))
@@ -209,6 +213,8 @@ class ProjectsPanel(QWidget):
         for i, p in enumerate(self._projects):
             when = time.strftime("%m-%d %H:%M", time.localtime(p.updated_at))
             badge = "   " + t("projects.current_badge") if p.id == self._current_pid else ""
+            if getattr(p, "unfinished", False):
+                badge += "   " + t("projects.in_progress_badge")
             preview = (p.last_prompt or "").strip().replace("\n", " ")
             if len(preview) > 26:
                 preview = preview[:26] + "…"

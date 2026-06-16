@@ -65,7 +65,9 @@ class ToolLoopAgent:
         reached_limit = True
         used_tools = False
         self._artifacts: list[str] = []
-        for _ in range(self.max_steps):
+        self._step = 0
+        for step in range(1, self.max_steps + 1):
+            self._step = step
             turn = await llm.complete_with_tools(
                 provider=provider, model=model, messages=messages, tools=tools,
                 api_key=self.api_key, api_base=api_base, extra=extra,
@@ -121,7 +123,9 @@ class ToolLoopAgent:
             args = json.loads(tc.arguments or "{}")
         except ValueError:
             args = {}
-        await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=f"\n🔧 {tc.name}…\n"))
+        await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN,
+                              text=t("loop.step", k=getattr(self, "_step", 1),
+                                     n=self.max_steps, name=tc.name)))
         t0 = time.time()
         result = await self.registry.dispatch(tc.name, args, self.ctx)
         summary = result.text
