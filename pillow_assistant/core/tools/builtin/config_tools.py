@@ -18,7 +18,8 @@ class ListModelsTool:
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         storage = getattr(ctx, "storage", None)
-        configs = storage.list_model_configs() if storage is not None else []
+        # list_model_configs() yields sqlite3.Row (no .get); convert to dict.
+        configs = [dict(c) for c in storage.list_model_configs()] if storage is not None else []
         lines: list[str] = []
         if not configs:
             lines.append(t("tool.lm.none"))
