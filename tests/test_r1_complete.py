@@ -130,7 +130,7 @@ def test_orchestrator_continue():
             check("session history fed (2 prior)", captured.get("history_len") == 2)
             check("turn recorded to session", len(store.load_history(existing, session.session_id)) == 4)
             check("ends DONE", events[-1].type == EventType.DONE)
-            check("project note shown", any("📂 项目" in e.text for e in events if e.type == EventType.TOKEN))
+            check("project note shown", any(existing.name in e.text for e in events if e.type == EventType.TOKEN))
     finally:
         orch.triage, llm.complete_with_tools = orig_tr, orig_cwt
 

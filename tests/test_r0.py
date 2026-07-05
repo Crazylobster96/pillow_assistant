@@ -96,7 +96,9 @@ def test_db_migration():
         migrated = store.migrate_plaintext_keys(vault)
         check("one key migrated", migrated == 1)
 
-        cols = {r[1] for r in sqlite3.connect(db_path).execute("PRAGMA table_info(model_configs)")}
+        conn = sqlite3.connect(db_path)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(model_configs)")}
+        conn.close()
         check("api_key column dropped", "api_key" not in cols)
         check("model column present", "model" in cols)
         check("secret now in vault", vault.get_secret("GPT") == "sk-PLAINTEXT")

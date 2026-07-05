@@ -71,6 +71,7 @@ class FloatingAssistant(QWidget):
         self.project_store = project_store
         self.undo_manager = undo_manager
         self._projects_win = None
+        self._conversation_memory_win = None
         self._undo_toast = None
         self._surface_win = None
         self._multi_wins: list = []  # windows opened by the present_windows tool
@@ -618,6 +619,7 @@ class FloatingAssistant(QWidget):
         center = self.frameGeometry().center()
         items = [
             (t("menu.projects"), self._open_projects),
+            ("Memory", self._open_conversation_memory),
             (t("menu.config"), self._open_config),
             (t("menu.close_displays"), self._close_displays),
             (t("menu.clear_refs"), self._clear_references),
@@ -721,6 +723,26 @@ class FloatingAssistant(QWidget):
     def _on_projects_destroyed(self, win) -> None:
         if self._projects_win is win:
             self._projects_win = None
+
+    def _open_conversation_memory(self) -> None:
+        from pillow_assistant.ui.conversation_memory_panel import ConversationMemoryPanel
+
+        if self._conversation_memory_win is not None:
+            try:
+                self._conversation_memory_win.close()
+            except RuntimeError:
+                pass
+        win = ConversationMemoryPanel(self.storage.db_path)
+        win.destroyed.connect(lambda *_, w=win: self._on_conversation_memory_destroyed(w))
+        self._conversation_memory_win = win
+        win.move(self.frameGeometry().center())
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
+    def _on_conversation_memory_destroyed(self, win) -> None:
+        if self._conversation_memory_win is win:
+            self._conversation_memory_win = None
 
     def _open_config(self) -> None:
         ModelConfigDialog(storage=self.storage, vault=self.vault, parent=self).exec()

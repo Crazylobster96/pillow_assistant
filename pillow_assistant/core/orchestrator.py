@@ -45,6 +45,18 @@ class Orchestrator:
         # with the full tool-call context (in-memory, cleared on use).
         self._resume_state: dict = {}
         self._mcp_loaded = False
+        self.conversation_memory = None
+        try:
+            from pillow_assistant.core.conversation_memory import ConversationMemoryService
+            from storage.conversation import ConversationMemoryStore
+
+            db_path = getattr(storage, "db_path", None)
+            if db_path is not None:
+                store = ConversationMemoryStore(db_path)
+                store.ensure_schema()
+                self.conversation_memory = ConversationMemoryService(store)
+        except Exception:
+            self.conversation_memory = None
         self._register_skills()
 
     # -- chat history persistence (one-off conversations, not project-bound) --
@@ -120,16 +132,19 @@ class Orchestrator:
                              max_steps=steps)
 
     async def __call__(self, request: AppRequest, emit: Emit) -> None:
-        configs = self.storage.list_model_configs()
+        configs = self.storage.list_model_configs() if hasattr(self.storage, "list_model_configs") else []
         context_text, ref_images = references.materialize(request.references)
         image_paths = ([request.image_path] if request.image_path else []) + ref_images
 
         # Multi-model routing: prefer a vlm model when images are involved;
         # honor agent/user-assigned purpose roles (chat / vision).
-        from pillow_assistant.core.model_roles import load_roles
-        ref = select_model(configs, request.model_ref, want_vision=bool(image_paths),
-                           roles=load_roles())
-        cfg = self.storage.get_model_config(ref)
+        if configs:
+            from pillow_assistant.core.model_roles import load_roles
+            ref = select_model(configs, request.model_ref, want_vision=bool(image_paths),
+                               roles=load_roles())
+            cfg = self.storage.get_model_config(ref)
+        else:
+            cfg = self.storage.get_model_config(request.model_ref)
         if cfg is None:
             await emit(AgentEvent(request_id=request.id, type=EventType.ERROR, text=t("core.no_model")))
             return
@@ -217,9 +232,20 @@ class Orchestrator:
         audit.run_start(request.prompt)
         agent = self._agent(cfg, api_key, chat_dir / "workspace", emit, request.references, audit,
                             request_id=request.id)
+        memory_ctx = None
+        final_context = context_text
+        if self.conversation_memory is not None:
+            try:
+                memory_ctx = await self.conversation_memory.prepare_chat_context(
+                    request.prompt, cfg=cfg, api_key=api_key
+                )
+                if memory_ctx.rendered_context:
+                    final_context = (context_text + "\n\n" if context_text else "") + memory_ctx.rendered_context
+            except Exception:
+                memory_ctx = None
         final_text = await agent.run(
             prompt=request.prompt, emit=emit, request_id=request.id,
-            context=context_text, image_paths=image_paths or None,
+            context=final_context, image_paths=image_paths or None,
             history=list(self._chat_history),
             resume_messages=self._resume_state.pop("chat", None),
         )
@@ -230,3 +256,10 @@ class Orchestrator:
         self._chat_history.append({"role": "assistant", "content": final_text})
         self._chat_history = self._chat_history[-CHAT_MEMORY_TURNS:]
         self._append_chat_history(request.prompt, final_text)
+        if self.conversation_memory is not None and memory_ctx is not None:
+            try:
+                await self.conversation_memory.record_chat_result(
+                    memory_ctx, request.prompt, final_text, cfg=cfg, api_key=api_key
+                )
+            except Exception:
+                pass

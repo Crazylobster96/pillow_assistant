@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Iterable, List, Optional
 
@@ -26,7 +27,7 @@ class Storage:
 
     # -- schema -------------------------------------------------------------
     def ensure_schema(self) -> None:
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS model_configs (
@@ -53,6 +54,8 @@ class Storage:
             if "model" not in self._columns(conn, "model_configs"):
                 conn.execute("ALTER TABLE model_configs ADD COLUMN model TEXT")
             conn.commit()
+        from storage.conversation import ConversationMemoryStore
+        ConversationMemoryStore(self.db_path).ensure_schema()
 
     def _columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -65,7 +68,7 @@ class Storage:
         column is dropped by rebuilding the table. Idempotent: a no-op once the
         column is gone.
         """
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             cols = self._columns(conn, "model_configs")
             if "api_key" not in cols:
                 return 0
@@ -110,18 +113,19 @@ class Storage:
             )
             conn.execute("DROP TABLE model_configs_old")
             conn.commit()
+            conn.execute("VACUUM")
             return migrated
 
     # -- first-run flag -----------------------------------------------------
     def is_first_run(self) -> bool:
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             row = conn.execute(
                 "SELECT value FROM app_meta WHERE key = ?", ("initialized",)
             ).fetchone()
         return row is None or row["value"] != "true"
 
     def mark_initialized(self) -> None:
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO app_meta(key, value)
@@ -140,12 +144,12 @@ class Storage:
         if model_type:
             query += " WHERE model_type = ?"
             params.append(model_type)
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             row = conn.execute(query, params).fetchone()
         return bool(row and row["total"])
 
     def list_model_configs(self) -> list[sqlite3.Row]:
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             return list(
                 conn.execute(
                     """
@@ -160,7 +164,7 @@ class Storage:
         """Look up a single config by display_name (preferred) or numeric id."""
         if ref is None:
             return None
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             row = conn.execute(
                 """
                 SELECT id, provider, model_type, display_name, base_url, model, extra
@@ -184,7 +188,7 @@ class Storage:
         configs = list(configs)
         new_names = {c.get("display_name", "") for c in configs}
 
-        with self.connect() as conn:
+        with closing(self.connect()) as conn:
             old_names = {
                 r["display_name"]
                 for r in conn.execute("SELECT display_name FROM model_configs")
