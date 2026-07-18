@@ -67,9 +67,10 @@ class PresentTool:
             # Model sometimes puts a bare file path in `text` — treat it as a path
             # so the file still opens in its type-adaptive viewer.
             if not path and text:
-                t = str(text).strip().strip('"')
-                if len(t) < 500 and "\n" not in t and Path(t).exists():  # file OR folder
-                    path, text = t, None
+                path_candidate = str(text).strip().strip('"')
+                if (len(path_candidate) < 500 and "\n" not in path_candidate
+                        and Path(path_candidate).exists()):  # file OR folder
+                    path, text = path_candidate, None
             if path:
                 p = Path(str(path))
                 if not p.exists():
