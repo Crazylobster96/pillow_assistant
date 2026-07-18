@@ -29,6 +29,8 @@ pip install -r requirements.txt
 python -m pillow_assistant
 ```
 
+应用数据库默认保存在 `~/.pillow/data/assistant.db`。从旧版本升级时，首次启动会从安装目录旁的旧 `data/assistant.db` 安全复制数据，保留旧库并在新目录写入 `migration.json` 迁移记录。Docker、便携版或企业部署可通过环境变量 `PILLOW_DATA_DIR` 指定其它数据目录。
+
 首次运行会弹出「模型 API 配置」窗口：
 
 1. 选择服务提供商：OpenAI / Anthropic / vLLM / Ollama / 自定义（任何 OpenAI 兼容端点）；
@@ -144,6 +146,8 @@ Run from source without installing:
 pip install -r requirements.txt
 python -m pillow_assistant
 ```
+
+The application database defaults to `~/.pillow/data/assistant.db`. On the first launch after upgrading, an existing legacy `data/assistant.db` beside the installation is safely copied to the new location; the legacy database is preserved and `migration.json` records the migration. Docker, portable, and managed deployments can select another directory with `PILLOW_DATA_DIR`.
 
 The first run opens the **Model API Settings** dialog:
 

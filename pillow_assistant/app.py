@@ -7,6 +7,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from pillow_assistant.core.bus import EventBus
+from pillow_assistant.core.data_paths import resolve_database_path
 from pillow_assistant.core.orchestrator import Orchestrator
 from pillow_assistant.core.project_manager import ProjectManager
 from pillow_assistant.core.session import Session
@@ -22,10 +23,11 @@ class PillowAssistantApplication:
 
     def __init__(self) -> None:
         self.base_path = Path(__file__).resolve().parent
-        self.data_path = (self.base_path.parent / "data").resolve()
-        self.data_path.mkdir(parents=True, exist_ok=True)
+        legacy_db_path = (self.base_path.parent / "data" / "assistant.db").resolve()
+        database_path = resolve_database_path(legacy_db_path)
+        self.data_path = database_path.parent
 
-        self.storage = Storage(self.data_path / "assistant.db")
+        self.storage = Storage(database_path)
         self.storage.ensure_schema()
 
         # Credential vault + one-time migration of any legacy plaintext keys.
