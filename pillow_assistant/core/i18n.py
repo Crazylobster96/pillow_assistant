@@ -222,12 +222,14 @@ _ZH = {
     "tool.http.not_allowed": "域名不在白名单：{host}",
     "tool.http.private": "拒绝访问内网/本机地址：{host}",
     "tool.http.failed": "请求失败：{err}",
-    "tool.cli.desc": "在当前项目工作目录执行一条命令行（调用本机已安装的命令行工具）。"
-                     "会拦截明显危险的命令；有 30s 超时。注意：不在沙箱内，仅用于安全的实用命令。",
+    "tool.cli.desc": "经用户确认后，在当前项目工作目录执行一个本机程序。"
+                     "不启用命令行 shell，不支持管道、重定向或命令串联；会拦截危险命令并限制为 30s。",
     "tool.cli.command": "要执行的单条命令行",
     "tool.cli.empty": "命令为空。",
     "tool.cli.disabled": "命令行工具已被禁用（可在配置中开启）。",
     "tool.cli.dangerous": "已拦截可能危险的命令：{cmd}",
+    "tool.cli.parse": "无法解析为单个程序命令：{err}",
+    "tool.cli.shell": "不允许通过 run_cli 启动命令行 shell：{name}",
     "tool.cli.timeout": "执行超过 {n}s 被终止。",
     "tool.browser.desc": "用无头浏览器打开一个网页并返回其可见文本（会执行 JS，适合普通 http_request 抓不到内容的动态页面）。"
                          "仅公网地址；可选 CSS 选择器只取某区域。",
@@ -319,6 +321,15 @@ _ZH = {
     "tool.ask.timeout": "用户未在限定时间内回答",
     "tool.ask.cancelled": "用户取消了本次提问",
     "tool.ask.answered": "用户回答：{answer}",
+    # -- central tool permission policy -----------------------------------------------------------
+    "tool.permission.network": "网络访问",
+    "tool.permission.system": "系统级操作",
+    "tool.permission.question": "工具「{name}」请求{permission}权限。\n操作：{detail}\n是否允许本次执行？",
+    "tool.permission.allow_once": "仅本次允许",
+    "tool.permission.deny": "拒绝",
+    "tool.permission.no_ui": "已拒绝工具「{name}」：当前环境无法向用户请求权限",
+    "tool.permission.denied": "用户拒绝了工具「{name}」的本次执行",
+    "tool.permission.timeout": "工具「{name}」的权限确认已超时",
     # -- tools: process_video --------------------------------------------------------------------
     "tool.vid.desc": "用 ffmpeg 处理视频，让它符合后台模型对时长/大小的要求："
                      "probe=探测时长/分辨率/大小；split=按时长切成片段（给 segment_seconds，"
@@ -548,13 +559,15 @@ _EN = {
     "tool.http.not_allowed": "Domain not in allowlist: {host}",
     "tool.http.private": "Refusing private/loopback address: {host}",
     "tool.http.failed": "Request failed: {err}",
-    "tool.cli.desc": "Run one command line in the current project workspace (uses locally installed CLI tools). "
-                     "Obviously dangerous commands are blocked; 30s timeout. Note: NOT sandboxed — "
-                     "safe utility commands only.",
+    "tool.cli.desc": "After user confirmation, run one local executable in the current project workspace. "
+                     "No command shell, pipes, redirects, or command chaining; dangerous commands are blocked "
+                     "and execution is limited to 30 seconds.",
     "tool.cli.command": "the single command line to run",
     "tool.cli.empty": "Empty command.",
     "tool.cli.disabled": "The CLI tool is disabled (enable it in settings).",
     "tool.cli.dangerous": "Blocked a potentially dangerous command: {cmd}",
+    "tool.cli.parse": "Could not parse this as one executable command: {err}",
+    "tool.cli.shell": "run_cli may not launch a command shell: {name}",
     "tool.cli.timeout": "Killed after exceeding {n}s.",
     "tool.browser.desc": "Open a web page in a headless browser and return its visible text (executes JS — "
                          "for dynamic pages plain http_request can't read). Public addresses only; "
@@ -650,6 +663,14 @@ _EN = {
     "tool.ask.timeout": "The user did not answer in time",
     "tool.ask.cancelled": "The user cancelled the question",
     "tool.ask.answered": "User answered: {answer}",
+    "tool.permission.network": "network access",
+    "tool.permission.system": "a system-level operation",
+    "tool.permission.question": "Tool \"{name}\" requests permission for {permission}.\nOperation: {detail}\nAllow this execution?",
+    "tool.permission.allow_once": "Allow once",
+    "tool.permission.deny": "Deny",
+    "tool.permission.no_ui": "Denied tool \"{name}\": this environment cannot request user permission",
+    "tool.permission.denied": "The user denied this execution of tool \"{name}\"",
+    "tool.permission.timeout": "Permission confirmation for tool \"{name}\" timed out",
     "tool.vid.desc": "Process a video with ffmpeg so it satisfies the backend model's duration/size "
                      "limits: probe = duration/resolution/size; split = cut into time segments "
                      "(give segment_seconds, or max_mb to auto-derive; stream-copy aligns to keyframes "

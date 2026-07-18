@@ -19,6 +19,7 @@ from pillow_assistant.core.model_router import select_model
 from pillow_assistant.core.observability import AuditLog
 from pillow_assistant.core.tools.base import ToolContext
 from pillow_assistant.core.tools.builtin import build_default_registry
+from pillow_assistant.core.i18n import t
 
 PASS, FAIL = 0, 0
 
@@ -60,13 +61,20 @@ def test_audit_log():
         check("kinds", [r["kind"] for r in recs] == ["run_start", "tool", "run_end"])
         check("tool record", recs[1]["name"] == "run_python" and recs[1]["ok"] is True and recs[1]["ms"] == 12)
 
+        a.tool_call("configure_model", {"display_name": "main", "api_key": "secret-value"}, False, 1, 0)
+        secret_rec = json.loads((Path(d) / "sub" / "audit.jsonl").read_text("utf-8").splitlines()[-1])
+        check("tool secrets redacted", "secret-value" not in secret_rec["args"] and "[redacted]" in secret_rec["args"])
+
 
 def test_browser_tool():
     print("browser_read guards / degradation")
     reg = build_default_registry()
     check("registered", "browser_read" in reg.names())
     with tempfile.TemporaryDirectory() as d:
-        ctx = ToolContext(workspace=Path(d))
+        async def allow_once(_spec):
+            return {"answer": t("tool.permission.allow_once"), "cancelled": False}
+
+        ctx = ToolContext(workspace=Path(d), ask=allow_once)
         check("bad scheme", not asyncio.run(reg.dispatch("browser_read", {"url": "ftp://x"}, ctx)).ok)
         check("loopback blocked", not asyncio.run(reg.dispatch("browser_read", {"url": "http://127.0.0.1/"}, ctx)).ok)
         # public URL: either playwright missing (degraded message) or a real attempt;

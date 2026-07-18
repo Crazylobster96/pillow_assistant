@@ -8,6 +8,8 @@ import json
 import time
 from pathlib import Path
 
+from pillow_assistant.core.tools.permission_policy import redact_sensitive
+
 
 class AuditLog:
     def __init__(self, path: str | Path) -> None:
@@ -29,5 +31,6 @@ class AuditLog:
         self._write({"kind": "run_end", "final_len": final_len})
 
     def tool_call(self, name: str, args: dict, ok, ms: int, result_len: int) -> None:
+        safe_args = redact_sensitive(args)
         self._write({"kind": "tool", "name": name, "ok": ok, "ms": ms,
-                     "result_len": result_len, "args": str(args)[:200]})
+                     "result_len": result_len, "args": str(safe_args)[:200]})

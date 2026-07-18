@@ -6,6 +6,7 @@ from typing import Any
 
 from pillow_assistant.core.i18n import t as _t
 from pillow_assistant.core.tools.base import ToolContext, ToolResult
+from pillow_assistant.core.tools.permission_policy import authorize
 
 
 class ToolRegistry:
@@ -32,6 +33,9 @@ class ToolRegistry:
         if tool is None:
             return ToolResult(ok=False, text=_t("tool.unknown", name=name))
         try:
+            denial = await authorize(tool, args, ctx)
+            if denial is not None:
+                return denial
             return await tool(args, ctx)
         except Exception as exc:  # noqa: BLE001 - surface tool errors to the model
             return ToolResult(ok=False, text=_t("tool.error", name=name, err=exc))

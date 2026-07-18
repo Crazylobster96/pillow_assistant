@@ -118,7 +118,7 @@ pytest tests/
 
 ### 安全说明
 
-沙箱是「防误伤」护栏而非安全边界（强隔离需 Docker）；`run_cli` 有危险命令黑名单；HTTP/浏览器工具拦截内网与本机地址（防 SSRF）；数据库不存任何凭证。
+沙箱是「防误伤」护栏而非安全边界（强隔离需 Docker）。所有 `SYSTEM` / `NETWORK` 工具每次执行前都必须由用户确认，无 UI 时默认拒绝；确认窗口会隐藏 API Key、Token 等敏感参数。`run_cli` 不再启用命令行 shell，不支持管道、重定向或命令串联，并过滤传给子进程的常见凭据环境变量；HTTP/浏览器工具还会拦截内网与本机地址（防 SSRF）。数据库不存任何凭证，审计日志也会脱敏工具参数。
 
 ---
 
@@ -236,4 +236,4 @@ pytest tests/
 
 ### Security notes
 
-The sandbox is a guard rail, not a security boundary (use Docker for hard isolation); `run_cli` has a dangerous-command blocklist; HTTP/browser tools reject private/loopback addresses (SSRF); the database stores no credentials.
+The sandbox is a guard rail, not a security boundary (use Docker for hard isolation). Every `SYSTEM` / `NETWORK` tool call requires per-execution user confirmation and is denied when no confirmation UI is available; API keys, tokens, and similar arguments are redacted in the prompt. `run_cli` no longer invokes a command shell, does not support pipes, redirects, or command chaining, and filters common credential environment variables before launching a child process. HTTP/browser tools also reject private and loopback addresses (SSRF). The database stores no credentials, and audit logs redact sensitive tool arguments.

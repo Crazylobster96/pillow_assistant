@@ -15,8 +15,13 @@ sys.path.insert(0, str(ROOT))
 
 from pillow_assistant.core.tools.base import ToolContext
 from pillow_assistant.core.tools.builtin import build_default_registry
+from pillow_assistant.core.i18n import t
 
 PASS, FAIL = 0, 0
+
+
+async def allow_once(_spec):
+    return {"answer": t("tool.permission.allow_once"), "cancelled": False}
 
 
 def check(name, cond):
@@ -42,11 +47,11 @@ def test_http_tool():
     print("http_request: SSRF / scheme / allowlist guards")
     reg = build_default_registry()
     with tempfile.TemporaryDirectory() as d:
-        ctx = ToolContext(workspace=Path(d))
+        ctx = ToolContext(workspace=Path(d), ask=allow_once)
         check("bad scheme rejected", not asyncio.run(reg.dispatch("http_request", {"url": "ftp://x/y"}, ctx)).ok)
         check("loopback blocked", not asyncio.run(reg.dispatch("http_request", {"url": "http://127.0.0.1/"}, ctx)).ok)
         check("localhost blocked", not asyncio.run(reg.dispatch("http_request", {"url": "http://localhost:8080/"}, ctx)).ok)
-        ctx2 = ToolContext(workspace=Path(d), http_allowlist=["example.com"])
+        ctx2 = ToolContext(workspace=Path(d), http_allowlist=["example.com"], ask=allow_once)
         r = asyncio.run(reg.dispatch("http_request", {"url": "https://evil.test/"}, ctx2))
         check("allowlist blocks others", not r.ok and "白名单" in r.text)
 
@@ -55,12 +60,14 @@ def test_cli_tool():
     print("run_cli: denylist + safe run + disable")
     reg = build_default_registry()
     with tempfile.TemporaryDirectory() as d:
-        ctx = ToolContext(workspace=Path(d))
+        ctx = ToolContext(workspace=Path(d), ask=allow_once)
         bad = asyncio.run(reg.dispatch("run_cli", {"command": "rm -rf /"}, ctx))
         check("dangerous blocked", not bad.ok and "拦截" in bad.text)
-        good = asyncio.run(reg.dispatch("run_cli", {"command": "echo hello123"}, ctx))
-        check("safe command runs", good.ok and "hello123" in good.text)
-        off = ToolContext(workspace=Path(d), allow_cli=False)
+        good = asyncio.run(reg.dispatch("run_cli", {"command": f'"{sys.executable}" --version'}, ctx))
+        check("safe command runs", good.ok and "Python" in good.text)
+        shell = asyncio.run(reg.dispatch("run_cli", {"command": "cmd /c echo unsafe"}, ctx))
+        check("shell launcher blocked", not shell.ok)
+        off = ToolContext(workspace=Path(d), allow_cli=False, ask=allow_once)
         check("disabled gate", not asyncio.run(reg.dispatch("run_cli", {"command": "echo x"}, off)).ok)
 
 
