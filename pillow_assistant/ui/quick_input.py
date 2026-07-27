@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QColor, QPainter, QPen, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -37,9 +37,11 @@ from pillow_assistant.ui.panels.base_panel import _CornerGrip
 # translucent enough to read as glass, opaque enough to keep text legible.
 def panel_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
-    control_alpha = min(225, alpha + 18)
+    # The control layer sits on top of the glass layer; keep it light so the
+    # desktop remains visible instead of stacking into an opaque white panel.
+    control_alpha = max(12, round(alpha * 0.25))
     return f"""
-QFrame#quickInput {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,195); border-radius: 18px; }}
+QFrame#quickInput {{ background: transparent; border: none; }}
 QLabel {{ color: #18202A; background: transparent; }}
 QComboBox, QLineEdit {{
     background: rgba(255,255,255,{control_alpha}); color: #18202A;
@@ -165,6 +167,17 @@ class QuickInputBar(QFrame):
             grip.move(self.width() - grip.width() - 5, self.height() - grip.height() - 5)
             grip.raise_()
 
+    def paintEvent(self, event) -> None:  # noqa: N802
+        """Paint one true-alpha glass layer instead of an opaque styled frame."""
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        alpha = round(self._glass_opacity * 2.55)
+        painter.setBrush(QColor(255, 255, 255, alpha))
+        painter.setPen(QPen(QColor(255, 255, 255, 195), 1))
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 18, 18)
+        painter.end()
+
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._position_grip()
@@ -172,6 +185,7 @@ class QuickInputBar(QFrame):
     def _apply_glass_opacity(self, opacity: int) -> None:
         self._glass_opacity = max(10, min(95, int(opacity)))
         self.setStyleSheet(panel_qss(self._glass_opacity))
+        self.update()
         if self.isVisible():
             enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     def showEvent(self, event) -> None:  # noqa: N802

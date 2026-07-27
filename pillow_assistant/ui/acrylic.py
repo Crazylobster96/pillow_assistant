@@ -38,7 +38,10 @@ def glass_opacity() -> int:
 
 def white_acrylic_color(opacity: int) -> int:
     """Convert an opacity percentage to Windows AABBGGRR white tint."""
-    return (round(max(10, min(95, opacity)) * 2.55) << 24) | 0x00FFFFFF
+    # Keep the compositor tint subtle: Qt paints the visible glass layer.
+    # Using the full opacity here would stack two white layers.
+    tint_alpha = max(3, round(max(10, min(95, opacity)) * 0.45))
+    return (tint_alpha << 24) | 0x00FFFFFF
 
 def enable_acrylic(widget, gradient_color: int = 0x99201A16) -> bool:
     """Enable acrylic blur behind ``widget``. Returns True on success.
