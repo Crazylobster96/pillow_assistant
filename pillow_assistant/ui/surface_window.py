@@ -18,17 +18,8 @@ from PySide6.QtWidgets import (
 )
 
 from pillow_assistant.core.i18n import t
-from pillow_assistant.core.settings import load_settings
-from pillow_assistant.ui.acrylic import enable_acrylic
+from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, white_acrylic_color
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
-
-def surface_glass_opacity() -> int:
-    """Return the user-facing white-glass opacity percentage."""
-    try:
-        return max(10, min(95, int(load_settings().get("surface_glass_opacity", 68))))
-    except (TypeError, ValueError):
-        return 68
-
 
 def _surface_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
@@ -57,7 +48,7 @@ class SurfaceMainWindow(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setObjectName("surfaceRoot")
-        self._glass_opacity = surface_glass_opacity()
+        self._glass_opacity = glass_opacity()
         self.setStyleSheet(_surface_qss(self._glass_opacity))
         self.setMinimumSize(420, 300)
         self.resize(760, 560)
@@ -97,8 +88,8 @@ class SurfaceMainWindow(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        alpha = round(self._glass_opacity * 2.55)
-        enable_acrylic(self, (alpha << 24) | 0x00FFFFFF)
+        enable_acrylic(self, white_acrylic_color(self._glass_opacity))
+
     def _open_workspace(self) -> None:
         if self._workspace:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self._workspace))))

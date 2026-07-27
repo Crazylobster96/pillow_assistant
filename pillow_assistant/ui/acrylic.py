@@ -14,6 +14,19 @@ from __future__ import annotations
 import sys
 
 
+def glass_opacity() -> int:
+    """Return the persisted white-glass opacity percentage."""
+    from pillow_assistant.core.settings import load_settings
+    try:
+        return max(10, min(95, int(load_settings().get("surface_glass_opacity", 68))))
+    except (TypeError, ValueError):
+        return 68
+
+
+def white_acrylic_color(opacity: int) -> int:
+    """Convert an opacity percentage to Windows AABBGGRR white tint."""
+    return (round(max(10, min(95, opacity)) * 2.55) << 24) | 0x00FFFFFF
+
 def enable_acrylic(widget, gradient_color: int = 0x99201A16) -> bool:
     """Enable acrylic blur behind ``widget``. Returns True on success.
 

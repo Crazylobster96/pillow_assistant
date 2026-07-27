@@ -28,29 +28,32 @@ from PySide6.QtWidgets import (
 
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, RequestKind
 from pillow_assistant.core.i18n import t
+from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, white_acrylic_color
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
 
 
 # No outer frame: the window/panel is transparent. The model picker, the prompt
 # box and the answer view are each their own dark, semi-transparent piece —
 # translucent enough to read as glass, opaque enough to keep text legible.
-PANEL_QSS = """
-QFrame#quickInput { background: transparent; border: none; }
-QLabel { color: #FFFFFF; background: transparent; }
-QComboBox, QLineEdit {
-    background: rgba(20, 24, 30, 185); color: #FFFFFF;
-    border: 1px solid rgba(255, 255, 255, 45); border-radius: 10px; padding: 7px;
-    selection-background-color: #4a82c0;
-}
-QPlainTextEdit {
-    background: rgba(14, 18, 24, 185); color: #FFFFFF;
-    border: 1px solid rgba(255, 255, 255, 40); border-radius: 10px; padding: 8px;
-    selection-background-color: #4a82c0;
-}
-QComboBox QAbstractItemView { background: #20262e; color: #FFFFFF; selection-background-color: #4a82c0; }
-QPushButton { color: #FFFFFF; background: rgba(255, 255, 255, 35);
-    border: none; border-radius: 8px; padding: 2px 8px; }
-QPushButton:hover { background: rgba(90, 140, 200, 235); }
+def panel_qss(opacity: int) -> str:
+    alpha = round(opacity * 2.55)
+    control_alpha = min(238, alpha + 45)
+    return f"""
+QFrame#quickInput {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,195); border-radius: 18px; }}
+QLabel {{ color: #18202A; background: transparent; }}
+QComboBox, QLineEdit {{
+    background: rgba(255,255,255,{control_alpha}); color: #18202A;
+    border: 1px solid rgba(70,80,95,42); border-radius: 10px; padding: 7px;
+    selection-background-color: rgba(55,120,220,150);
+}}
+QPlainTextEdit {{
+    background: rgba(255,255,255,{control_alpha}); color: #18202A;
+    border: 1px solid rgba(70,80,95,38); border-radius: 10px; padding: 8px;
+    selection-background-color: rgba(55,120,220,150);
+}}
+QComboBox QAbstractItemView {{ background: #F7F9FC; color: #18202A; selection-background-color: #BFD7F7; }}
+QPushButton {{ color: #25303D; background: rgba(255,255,255,125); border: none; border-radius: 8px; padding: 2px 8px; }}
+QPushButton:hover {{ background: rgba(255,255,255,220); }}
 """
 
 log = logging.getLogger(__name__)
@@ -77,7 +80,8 @@ class QuickInputBar(QFrame):
         # actually paint its background.
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setObjectName("quickInput")
-        self.setStyleSheet(PANEL_QSS)
+        self._glass_opacity = glass_opacity()
+        self.setStyleSheet(panel_qss(self._glass_opacity))
         self.setMouseTracking(True)
 
         self.models = self.storage.list_model_configs()
@@ -114,7 +118,7 @@ class QuickInputBar(QFrame):
         close_btn.setFixedSize(26, 26)
         close_btn.setToolTip(t("input.close_tip"))
         close_btn.setStyleSheet(
-            "QPushButton { color:#FFF; background: rgba(255,255,255,30); border:none;"
+            "QPushButton { color:#25303D; background: rgba(255,255,255,125); border:none;"
             " border-radius:13px; font-size:16px; }"
             "QPushButton:hover { background: rgba(235,90,110,235); }"
         )
@@ -164,6 +168,9 @@ class QuickInputBar(QFrame):
         super().resizeEvent(event)
         self._position_grip()
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     # -- references chips ---------------------------------------------------
     def _refresh_chips(self) -> None:
         while self.chips_row.count():

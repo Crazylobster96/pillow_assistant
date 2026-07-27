@@ -14,6 +14,7 @@ from typing import Optional
 from PySide6.QtCore import QEvent, QRect, Qt
 
 from pillow_assistant.core.i18n import t
+from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, white_acrylic_color
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -63,7 +64,7 @@ class _CornerGrip(QWidget):
     def paintEvent(self, event) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
-        p.setPen(QPen(QColor(255, 255, 255, 150), 1.5))
+        p.setPen(QPen(QColor(55, 65, 78, 130), 1.5))
         s = self.SIZE
         for off in (5, 10, 15):
             p.drawLine(s - off, s - 4, s - 4, s - off)
@@ -71,26 +72,29 @@ class _CornerGrip(QWidget):
 
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, RequestKind
 
-PANEL_QSS = """
-QFrame#filePanel { background: rgba(18, 22, 28, 225); border: 1px solid rgba(255,255,255,45); border-radius: 14px; }
-QLabel { color: #F2F6FA; background: transparent; }
-QLabel#panelTitle { color: #FFFFFF; font-size: 14px; font-weight: bold; }
-QComboBox, QLineEdit {
-    background: rgba(36, 42, 51, 235); color: #F4F8FC;
-    border: 1px solid rgba(255,255,255,55); border-radius: 8px; padding: 6px;
-    selection-background-color: #4a82c0;
-}
-QPlainTextEdit, QTextEdit, QListWidget, QTableWidget {
-    background: rgba(10, 14, 20, 235); color: #F4F8FC;
-    border: 1px solid rgba(255,255,255,40); border-radius: 8px;
-    selection-background-color: #4a82c0;
-}
-QHeaderView::section { background: #232a33; color: #F4F8FC; border: none; padding: 4px; }
-QComboBox QAbstractItemView { background: #232a33; color: #F4F8FC; selection-background-color: #4a82c0; }
-QScrollBar:vertical { background: transparent; width: 10px; }
-QScrollBar::handle:vertical { background: rgba(255,255,255,60); border-radius: 5px; }
-QSplitter#panelSplitter::handle { background: rgba(255,255,255,35); border-radius: 3px; }
-QSplitter#panelSplitter::handle:hover { background: rgba(90,140,200,210); }
+def panel_qss(opacity: int) -> str:
+    alpha = round(opacity * 2.55)
+    control_alpha = min(238, alpha + 45)
+    return f"""
+QFrame#filePanel {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,195); border-radius: 18px; }}
+QLabel {{ color: #18202A; background: transparent; }}
+QLabel#panelTitle {{ color: #18202A; font-size: 14px; font-weight: bold; }}
+QComboBox, QLineEdit {{
+    background: rgba(255,255,255,{control_alpha}); color: #18202A;
+    border: 1px solid rgba(70,80,95,42); border-radius: 9px; padding: 6px;
+    selection-background-color: rgba(55,120,220,150);
+}}
+QPlainTextEdit, QTextEdit, QListWidget, QTableWidget, QTreeView {{
+    background: rgba(255,255,255,{control_alpha}); color: #18202A;
+    border: 1px solid rgba(70,80,95,38); border-radius: 10px;
+    selection-background-color: rgba(55,120,220,150);
+}}
+QHeaderView::section {{ background: rgba(235,239,244,230); color: #18202A; border: none; padding: 4px; }}
+QComboBox QAbstractItemView {{ background: #F7F9FC; color: #18202A; selection-background-color: #BFD7F7; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; }}
+QScrollBar::handle:vertical {{ background: rgba(70,80,95,70); border-radius: 5px; }}
+QSplitter#panelSplitter::handle {{ background: rgba(70,80,95,38); border-radius: 3px; }}
+QSplitter#panelSplitter::handle:hover {{ background: rgba(55,120,220,150); }}
 """
 
 
@@ -123,7 +127,8 @@ class FilePanel(QFrame):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)  # closing fully tears it down
         self.setObjectName("filePanel")
-        self.setStyleSheet(PANEL_QSS)
+        self._glass_opacity = glass_opacity()
+        self.setStyleSheet(panel_qss(self._glass_opacity))
         self.setMinimumSize(360, 280)
         self.setMouseTracking(True)
 
@@ -144,7 +149,7 @@ class FilePanel(QFrame):
         close_btn = QPushButton("×", self)
         close_btn.setFixedSize(26, 26)
         close_btn.setStyleSheet(
-            "QPushButton { color:#FFF; background: rgba(255,255,255,30); border:none; border-radius:13px; font-size:16px; }"
+            "QPushButton { color:#25303D; background: rgba(255,255,255,125); border:none; border-radius:13px; font-size:16px; }"
             "QPushButton:hover { background: rgba(235,90,110,235); }"
         )
         close_btn.clicked.connect(self.close)
@@ -281,6 +286,7 @@ class FilePanel(QFrame):
         super().showEvent(event)
         self._position_grip()
         self._on_resized()
+        enable_acrylic(self, white_acrylic_color(self._glass_opacity))
 
     def _on_resized(self) -> None:
         """Hook for subclasses to rescale content to the new size."""

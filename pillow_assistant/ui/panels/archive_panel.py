@@ -12,9 +12,9 @@ from pillow_assistant.ui.panels.extract import MAX_ENTRIES, list_entries
 
 
 TREE_QSS = """
-QTreeView { background: rgba(10, 14, 20, 235); color: #F4F8FC;
-    border: 1px solid rgba(255,255,255,40); border-radius: 8px; }
-QTreeView::item:selected { background: #4a82c0; }
+QTreeView { background: rgba(255,255,255,215); color: #18202A;
+    border: 1px solid rgba(70,80,95,38); border-radius: 8px; }
+QTreeView::item:selected { background: #BFD7F7; color: #18202A; }
 """
 
 
