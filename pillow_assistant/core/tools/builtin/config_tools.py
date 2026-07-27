@@ -172,6 +172,27 @@ class SetMaxStepsTool:
         return ToolResult(ok=True, text=t("tool.steps.done", n=steps))
 
 
+class SetSurfaceTransparencyTool:
+    name = "set_surface_transparency"
+    permission = Permission.SYSTEM
+    description = ("Adjust the white frosted-glass opacity of result/display windows "
+                   "when the user asks to make the window more transparent or opaque.")
+    parameters = {"type": "object", "properties": {"opacity": {
+        "type": "integer", "minimum": 10, "maximum": 95,
+        "description": "White glass opacity percent; 10 is transparent, 95 nearly opaque.",
+    }}, "required": ["opacity"]}
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        try:
+            opacity = int(args.get("opacity"))
+        except (TypeError, ValueError):
+            return ToolResult(ok=False, text="Opacity must be an integer from 10 to 95.")
+        if not 10 <= opacity <= 95:
+            return ToolResult(ok=False, text="Opacity must be between 10% and 95%.")
+        from pillow_assistant.core.settings import set_setting
+        set_setting("surface_glass_opacity", opacity)
+        return ToolResult(ok=True, text=f"Frosted-glass opacity set to {opacity}%. Newly opened display windows use it immediately.")
+
 class SetLanguageTool:
     name = "set_language"
     permission = Permission.SYSTEM

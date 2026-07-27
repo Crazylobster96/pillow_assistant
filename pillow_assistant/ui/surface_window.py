@@ -18,18 +18,32 @@ from PySide6.QtWidgets import (
 )
 
 from pillow_assistant.core.i18n import t
+from pillow_assistant.core.settings import load_settings
+from pillow_assistant.ui.acrylic import enable_acrylic
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
 
-QSS = """
-QWidget#surfaceRoot { background: rgba(18, 22, 28, 240); border: 1px solid rgba(255,255,255,45); border-radius: 14px; }
-QLabel { color: #F2F6FA; background: transparent; }
-QLabel#sTitle { font-size: 14px; font-weight: bold; }
-QPlainTextEdit, QListWidget {
-    background: rgba(10, 14, 20, 235); color: #F4F8FC;
-    border: 1px solid rgba(255,255,255,40); border-radius: 8px;
-}
-QPushButton { color:#FFFFFF; background: rgba(255,255,255,35); border:none; border-radius:8px; padding:5px 10px; }
-QPushButton:hover { background: rgba(90,140,200,235); }
+def surface_glass_opacity() -> int:
+    """Return the user-facing white-glass opacity percentage."""
+    try:
+        return max(10, min(95, int(load_settings().get("surface_glass_opacity", 68))))
+    except (TypeError, ValueError):
+        return 68
+
+
+def _surface_qss(opacity: int) -> str:
+    alpha = round(opacity * 2.55)
+    panel_alpha = min(235, alpha + 35)
+    return f"""
+QWidget#surfaceRoot {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,190); border-radius: 18px; }}
+QLabel {{ color: #18202A; background: transparent; }}
+QLabel#sTitle {{ font-size: 14px; font-weight: bold; }}
+QPlainTextEdit, QListWidget {{
+    background: rgba(255,255,255,{panel_alpha}); color: #18202A;
+    selection-background-color: rgba(40,110,220,150);
+    border: 1px solid rgba(70,80,95,35); border-radius: 10px;
+}}
+QPushButton {{ color:#25303D; background: rgba(255,255,255,125); border:1px solid rgba(70,80,95,28); border-radius:9px; padding:5px 10px; }}
+QPushButton:hover {{ background: rgba(255,255,255,210); }}
 """
 
 
@@ -43,7 +57,8 @@ class SurfaceMainWindow(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setObjectName("surfaceRoot")
-        self.setStyleSheet(QSS)
+        self._glass_opacity = surface_glass_opacity()
+        self.setStyleSheet(_surface_qss(self._glass_opacity))
         self.setMinimumSize(420, 300)
         self.resize(760, 560)
 
@@ -80,6 +95,10 @@ class SurfaceMainWindow(QWidget):
         self._grip = _CornerGrip(self)
         self._grip.move(self.width() - self._grip.width() - 6, self.height() - self._grip.height() - 6)
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        alpha = round(self._glass_opacity * 2.55)
+        enable_acrylic(self, (alpha << 24) | 0x00FFFFFF)
     def _open_workspace(self) -> None:
         if self._workspace:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self._workspace))))
