@@ -175,25 +175,33 @@ class SetMaxStepsTool:
 class SetSurfaceTransparencyTool:
     name = "set_surface_transparency"
     permission = Permission.SYSTEM
-    description = ("Adjust the white frosted-glass opacity of result/display windows "
-                   "when the user asks to make the window more transparent or opaque.")
-    parameters = {"type": "object", "properties": {"opacity": {
-        "type": "integer", "minimum": 10, "maximum": 95,
-        "description": "White glass opacity percent; 10 is transparent, 95 nearly opaque.",
-    }}, "required": ["opacity"]}
+    description = (
+        "Adjust display-window frosted-glass transparency. Higher transparency "
+        "means more see-through. If the user specifies opacity, convert it with "
+        "transparency = 100 - opacity."
+    )
+    parameters = {"type": "object", "properties": {"transparency": {
+        "type": "integer", "minimum": 5, "maximum": 90,
+        "description": "Transparency percent: 5 is nearly opaque; 90 is very transparent.",
+    }}, "required": ["transparency"]}
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         try:
-            opacity = int(args.get("opacity"))
+            transparency = int(args.get("transparency"))
         except (TypeError, ValueError):
-            return ToolResult(ok=False, text="Opacity must be an integer from 10 to 95.")
-        if not 10 <= opacity <= 95:
-            return ToolResult(ok=False, text="Opacity must be between 10% and 95%.")
+            return ToolResult(ok=False, text="Transparency must be an integer from 5 to 90.")
+        if not 5 <= transparency <= 90:
+            return ToolResult(ok=False, text="Transparency must be between 5% and 90%.")
+        opacity = 100 - transparency
         from pillow_assistant.core.settings import set_setting
         set_setting("surface_glass_opacity", opacity)
         from pillow_assistant.ui.acrylic import notify_glass_opacity
         notify_glass_opacity(opacity)
-        return ToolResult(ok=True, text=f"Frosted-glass opacity set to {opacity}%. Open display windows update immediately.")
+        return ToolResult(
+            ok=True,
+            text=(f"Frosted-glass transparency set to {transparency}% "
+                  f"(background opacity {opacity}%). Open display windows updated."),
+        )
 
 class SetLanguageTool:
     name = "set_language"
