@@ -17,6 +17,9 @@ from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices
 
 from pillow_assistant.core.i18n import t
+from pillow_assistant.ui.acrylic import (
+    enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color,
+)
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -31,10 +34,10 @@ from PySide6.QtWidgets import (
 
 
 _CONFIRM_QSS = """
-QDialog#confirmRoot { background: #1b2129; border: 1px solid rgba(255,255,255,55); border-radius: 12px; }
-QLabel { color: #EAF0F6; background: transparent; font-size: 13px; }
-QLabel#cTitle { font-size: 14px; font-weight: bold; color: #FFFFFF; }
-QPushButton { color:#FFFFFF; background: rgba(255,255,255,32); border:none; border-radius:8px; padding:8px 18px; }
+QDialog#confirmRoot { background: #F7F9FC; border: 1px solid rgba(255,255,255,55); border-radius: 12px; }
+QLabel { color: #18202A; background: transparent; font-size: 13px; }
+QLabel#cTitle { font-size: 14px; font-weight: bold; color: #18202A; }
+QPushButton { color:#25303D; background: rgba(70,80,95,18); border:none; border-radius:8px; padding:8px 18px; }
 QPushButton:hover { background: rgba(255,255,255,52); }
 QPushButton#danger { background: rgba(214,69,90,235); font-weight:bold; }
 QPushButton#danger:hover { background: rgba(232,86,108,245); }
@@ -70,48 +73,43 @@ class _ConfirmDialog(QDialog):
         lay.addLayout(row)
         cancel.setFocus()
 
-PANEL_QSS = """
-QWidget#projectsRoot {
-    background: rgba(20, 24, 31, 246);
-    border: 1px solid rgba(255,255,255,40); border-radius: 16px;
-}
-QLabel { color: #EAF0F6; background: transparent; }
-QLabel#projTitle { font-size: 17px; font-weight: bold; color: #FFFFFF; }
-QLabel#projSubtitle { font-size: 12px; color: #8A97A6; }
-QLabel#histHeader { font-size: 13px; font-weight: bold; color: #9fc0ec; }
-
-QListWidget {
-    background: rgba(12, 16, 22, 200); color: #EAF0F6;
-    border: 1px solid rgba(255,255,255,28); border-radius: 12px;
+def panel_qss(opacity: int) -> str:
+    alpha = round(opacity * 2.55)
+    control_alpha = min(225, alpha + 18)
+    return f"""
+QWidget#projectsRoot {{
+    background: rgba(255,255,255,{alpha});
+    border: 1px solid rgba(255,255,255,195); border-radius: 18px;
+}}
+QLabel {{ color: #18202A; background: transparent; }}
+QLabel#projTitle {{ font-size: 17px; font-weight: bold; color: #18202A; }}
+QLabel#projSubtitle {{ font-size: 12px; color: #667282; }}
+QLabel#histHeader {{ font-size: 13px; font-weight: bold; color: #37699E; }}
+QListWidget {{
+    background: rgba(255,255,255,{control_alpha}); color: #18202A;
+    border: 1px solid rgba(70,80,95,38); border-radius: 12px;
     padding: 6px; outline: 0;
-}
-QListWidget::item {
-    border-radius: 10px; padding: 9px 10px; margin: 2px 1px;
-    color: #EAF0F6;
-}
-QListWidget::item:hover { background: rgba(255,255,255,18); }
-QListWidget::item:selected { background: rgba(74,124,200,235); color: #FFFFFF; }
-
-QPlainTextEdit {
-    background: rgba(12, 16, 22, 200); color: #DCE5EE;
-    border: 1px solid rgba(255,255,255,28); border-radius: 12px; padding: 10px;
-    selection-background-color: #4a82c0;
-}
-QPushButton {
-    color:#FFFFFF; background: rgba(255,255,255,28);
-    border:none; border-radius:9px; padding:8px 14px;
-}
-QPushButton:hover { background: rgba(255,255,255,45); }
-QPushButton#switchBtn { background: rgba(74,124,200,235); font-weight: bold; }
-QPushButton#switchBtn:hover { background: rgba(94,148,224,245); }
-QPushButton#switchBtn:disabled { background: rgba(255,255,255,18); color: #6b7785; }
-QPushButton#closeBtn { background: rgba(255,255,255,22); border-radius:14px; font-size:16px; }
-QPushButton#closeBtn:hover { background: rgba(235,90,110,235); }
-QPushButton#deleteBtn:hover { background: rgba(214,69,90,235); }
-QPushButton#deleteBtn:disabled { background: rgba(255,255,255,12); color: #6b7785; }
-QScrollBar:vertical { background: transparent; width: 9px; margin: 2px; }
-QScrollBar::handle:vertical { background: rgba(255,255,255,55); border-radius: 4px; }
-QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
+}}
+QListWidget::item {{ border-radius: 10px; padding: 9px 10px; margin: 2px 1px; color: #18202A; }}
+QListWidget::item:hover {{ background: rgba(80,120,180,28); }}
+QListWidget::item:selected {{ background: rgba(74,124,200,205); color: #FFFFFF; }}
+QPlainTextEdit {{
+    background: rgba(255,255,255,{control_alpha}); color: #18202A;
+    border: 1px solid rgba(70,80,95,38); border-radius: 12px; padding: 10px;
+    selection-background-color: rgba(55,120,220,150);
+}}
+QPushButton {{ color:#25303D; background: rgba(255,255,255,125); border:none; border-radius:9px; padding:8px 14px; }}
+QPushButton:hover {{ background: rgba(255,255,255,220); }}
+QPushButton#switchBtn {{ background: rgba(74,124,200,220); color:#FFFFFF; font-weight: bold; }}
+QPushButton#switchBtn:hover {{ background: rgba(94,148,224,235); }}
+QPushButton#switchBtn:disabled {{ background: rgba(70,80,95,20); color: #7B8591; }}
+QPushButton#closeBtn {{ background: rgba(255,255,255,125); border-radius:14px; font-size:16px; }}
+QPushButton#closeBtn:hover {{ background: rgba(235,90,110,210); color:#FFFFFF; }}
+QPushButton#deleteBtn:hover {{ background: rgba(214,69,90,210); color:#FFFFFF; }}
+QPushButton#deleteBtn:disabled {{ background: rgba(70,80,95,15); color: #7B8591; }}
+QScrollBar:vertical {{ background: transparent; width: 9px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: rgba(70,80,95,70); border-radius: 4px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
 """
 
 
@@ -130,7 +128,9 @@ class ProjectsPanel(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setObjectName("projectsRoot")
-        self.setStyleSheet(PANEL_QSS)
+        self._glass_opacity = glass_opacity()
+        self.setStyleSheet(panel_qss(self._glass_opacity))
+        glass_theme_changed.opacity_changed.connect(self._apply_glass_opacity)
         self.resize(760, 500)
 
         outer = QVBoxLayout(self)
@@ -224,7 +224,7 @@ class ProjectsPanel(QWidget):
             it = QListWidgetItem(text, self.list)
             it.setSizeHint(QSize(0, 60))
             if p.id == self._current_pid:
-                it.setForeground(QColor("#bcd6ff"))
+                it.setForeground(QColor("#37699E"))
                 current_row = (1 if self._has_chat else 0) + i
 
         if not self._projects and not self._has_chat:
@@ -343,9 +343,15 @@ class ProjectsPanel(QWidget):
         if project is not None:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(project.workspace)))
 
+    def _apply_glass_opacity(self, opacity: int) -> None:
+        self._glass_opacity = max(10, min(95, int(opacity)))
+        self.setStyleSheet(panel_qss(self._glass_opacity))
+        if self.isVisible():
+            enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     # -- auto-dismiss -------------------------------------------------------
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self._apply_glass_opacity(glass_opacity())
         self.activateWindow()
         self.raise_()
         QTimer.singleShot(350, lambda: setattr(self, "_armed", True))

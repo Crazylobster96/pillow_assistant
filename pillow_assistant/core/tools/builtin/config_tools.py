@@ -191,7 +191,9 @@ class SetSurfaceTransparencyTool:
             return ToolResult(ok=False, text="Opacity must be between 10% and 95%.")
         from pillow_assistant.core.settings import set_setting
         set_setting("surface_glass_opacity", opacity)
-        return ToolResult(ok=True, text=f"Frosted-glass opacity set to {opacity}%. Newly opened display windows use it immediately.")
+        from pillow_assistant.ui.acrylic import notify_glass_opacity
+        notify_glass_opacity(opacity)
+        return ToolResult(ok=True, text=f"Frosted-glass opacity set to {opacity}%. Open display windows update immediately.")
 
 class SetLanguageTool:
     name = "set_language"

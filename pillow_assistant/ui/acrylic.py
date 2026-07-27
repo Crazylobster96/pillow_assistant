@@ -13,6 +13,19 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import QObject, Signal
+
+
+class _GlassThemeSignals(QObject):
+    opacity_changed = Signal(int)
+
+
+glass_theme_changed = _GlassThemeSignals()
+
+
+def notify_glass_opacity(opacity: int) -> None:
+    """Notify open UI windows after the setting is persisted."""
+    glass_theme_changed.opacity_changed.emit(opacity)
 
 def glass_opacity() -> int:
     """Return the persisted white-glass opacity percentage."""

@@ -18,12 +18,12 @@ from PySide6.QtWidgets import (
 )
 
 from pillow_assistant.core.i18n import t
-from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, white_acrylic_color
+from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
 
 def _surface_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
-    panel_alpha = min(235, alpha + 35)
+    panel_alpha = min(225, alpha + 18)
     return f"""
 QWidget#surfaceRoot {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,190); border-radius: 18px; }}
 QLabel {{ color: #18202A; background: transparent; }}
@@ -50,6 +50,7 @@ class SurfaceMainWindow(QWidget):
         self.setObjectName("surfaceRoot")
         self._glass_opacity = glass_opacity()
         self.setStyleSheet(_surface_qss(self._glass_opacity))
+        glass_theme_changed.opacity_changed.connect(self._apply_glass_opacity)
         self.setMinimumSize(420, 300)
         self.resize(760, 560)
 
@@ -86,9 +87,14 @@ class SurfaceMainWindow(QWidget):
         self._grip = _CornerGrip(self)
         self._grip.move(self.width() - self._grip.width() - 6, self.height() - self._grip.height() - 6)
 
+    def _apply_glass_opacity(self, opacity: int) -> None:
+        self._glass_opacity = max(10, min(95, int(opacity)))
+        self.setStyleSheet(_surface_qss(self._glass_opacity))
+        if self.isVisible():
+            enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        enable_acrylic(self, white_acrylic_color(self._glass_opacity))
+        self._apply_glass_opacity(glass_opacity())
 
     def _open_workspace(self) -> None:
         if self._workspace:

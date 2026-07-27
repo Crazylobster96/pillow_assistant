@@ -14,7 +14,7 @@ from typing import Optional
 from PySide6.QtCore import QEvent, QRect, Qt
 
 from pillow_assistant.core.i18n import t
-from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, white_acrylic_color
+from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -74,7 +74,7 @@ from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, Reques
 
 def panel_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
-    control_alpha = min(238, alpha + 45)
+    control_alpha = min(225, alpha + 18)
     return f"""
 QFrame#filePanel {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,195); border-radius: 18px; }}
 QLabel {{ color: #18202A; background: transparent; }}
@@ -129,6 +129,7 @@ class FilePanel(QFrame):
         self.setObjectName("filePanel")
         self._glass_opacity = glass_opacity()
         self.setStyleSheet(panel_qss(self._glass_opacity))
+        glass_theme_changed.opacity_changed.connect(self._apply_glass_opacity)
         self.setMinimumSize(360, 280)
         self.setMouseTracking(True)
 
@@ -282,11 +283,16 @@ class FilePanel(QFrame):
         self._position_grip()
         self._on_resized()
 
+    def _apply_glass_opacity(self, opacity: int) -> None:
+        self._glass_opacity = max(10, min(95, int(opacity)))
+        self.setStyleSheet(panel_qss(self._glass_opacity))
+        if self.isVisible():
+            enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self._position_grip()
         self._on_resized()
-        enable_acrylic(self, white_acrylic_color(self._glass_opacity))
+        self._apply_glass_opacity(glass_opacity())
 
     def _on_resized(self) -> None:
         """Hook for subclasses to rescale content to the new size."""
