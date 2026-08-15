@@ -176,30 +176,63 @@ class SetSurfaceTransparencyTool:
     name = "set_surface_transparency"
     permission = Permission.SYSTEM
     description = (
-        "Adjust display-window frosted-glass transparency. Higher transparency "
-        "means more see-through. If the user specifies opacity, convert it with "
-        "transparency = 100 - opacity."
+        "Adjust frosted-glass TRANSPARENCY (not opacity). For relative wording "
+        "such as 'more transparent', 'more see-through', or Chinese equivalents, "
+        "ALWAYS use mode='more_transparent'. For 'less transparent' or 'more opaque', "
+        "use mode='less_transparent'. Use mode='set' only for an explicit percentage."
     )
-    parameters = {"type": "object", "properties": {"transparency": {
-        "type": "integer", "minimum": 5, "maximum": 90,
-        "description": "Transparency percent: 5 is nearly opaque; 90 is very transparent.",
-    }}, "required": ["transparency"]}
+    parameters = {
+        "type": "object",
+        "properties": {
+            "mode": {
+                "type": "string",
+                "enum": ["set", "more_transparent", "less_transparent"],
+                "description": "Relative requests must use more_transparent or less_transparent.",
+            },
+            "transparency": {
+                "type": "integer", "minimum": 5, "maximum": 90,
+                "description": "Only for mode=set. Higher means more see-through: 90 is very transparent.",
+            },
+            "amount": {
+                "type": "integer", "minimum": 1, "maximum": 40,
+                "description": "Relative adjustment size, default 15 percentage points.",
+            },
+        },
+        "required": ["mode"],
+    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        mode = (args.get("mode") or "").strip().lower()
+        from pillow_assistant.core.settings import load_settings, set_setting
         try:
-            transparency = int(args.get("transparency"))
+            current_opacity = max(10, min(95, int(load_settings().get("surface_glass_opacity", 68))))
         except (TypeError, ValueError):
-            return ToolResult(ok=False, text="Transparency must be an integer from 5 to 90.")
-        if not 5 <= transparency <= 90:
-            return ToolResult(ok=False, text="Transparency must be between 5% and 90%.")
+            current_opacity = 68
+        current = 100 - current_opacity
+
+        if mode == "set":
+            try:
+                transparency = int(args.get("transparency"))
+            except (TypeError, ValueError):
+                return ToolResult(ok=False, text="mode=set requires transparency from 5 to 90.")
+        elif mode in ("more_transparent", "less_transparent"):
+            try:
+                amount = int(args.get("amount", 15))
+            except (TypeError, ValueError):
+                amount = 15
+            amount = max(1, min(40, amount))
+            transparency = current + amount if mode == "more_transparent" else current - amount
+        else:
+            return ToolResult(ok=False, text="mode must be set, more_transparent, or less_transparent.")
+
+        transparency = max(5, min(90, transparency))
         opacity = 100 - transparency
-        from pillow_assistant.core.settings import set_setting
         set_setting("surface_glass_opacity", opacity)
         from pillow_assistant.ui.acrylic import notify_glass_opacity
         notify_glass_opacity(opacity)
         return ToolResult(
             ok=True,
-            text=(f"Frosted-glass transparency set to {transparency}% "
+            text=(f"Frosted-glass transparency is now {transparency}% "
                   f"(background opacity {opacity}%). Open display windows updated."),
         )
 

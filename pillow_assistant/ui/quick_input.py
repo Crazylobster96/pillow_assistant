@@ -35,29 +35,33 @@ from pillow_assistant.ui.panels.base_panel import _CornerGrip
 # No outer frame: the window/panel is transparent. The model picker, the prompt
 # box and the answer view are each their own dark, semi-transparent piece —
 # translucent enough to read as glass, opaque enough to keep text legible.
+def _glass_alpha(opacity: int) -> int:
+    """Subtle non-linear tint: desktop stays visible at normal settings."""
+    normalized = max(10, min(95, opacity)) / 100.0
+    return round(255 * normalized * normalized * 0.65)
+
+
 def panel_qss(opacity: int) -> str:
-    alpha = round(opacity * 2.55)
-    # The control layer sits on top of the glass layer; keep it light so the
-    # desktop remains visible instead of stacking into an opaque white panel.
-    control_alpha = max(12, round(alpha * 0.25))
+    glass_alpha = _glass_alpha(opacity)
+    # Controls add only a very thin layer on top of the glass background.
+    control_alpha = max(3, round(glass_alpha * 0.15))
     return f"""
 QFrame#quickInput {{ background: transparent; border: none; }}
 QLabel {{ color: #18202A; background: transparent; }}
 QComboBox, QLineEdit {{
     background: rgba(255,255,255,{control_alpha}); color: #18202A;
-    border: 1px solid rgba(70,80,95,42); border-radius: 10px; padding: 7px;
+    border: 1px solid rgba(70,80,95,52); border-radius: 10px; padding: 7px;
     selection-background-color: rgba(55,120,220,150);
 }}
 QPlainTextEdit {{
     background: rgba(255,255,255,{control_alpha}); color: #18202A;
-    border: 1px solid rgba(70,80,95,38); border-radius: 10px; padding: 8px;
+    border: 1px solid rgba(70,80,95,48); border-radius: 10px; padding: 8px;
     selection-background-color: rgba(55,120,220,150);
 }}
-QComboBox QAbstractItemView {{ background: #F7F9FC; color: #18202A; selection-background-color: #BFD7F7; }}
-QPushButton {{ color: #25303D; background: rgba(255,255,255,125); border: none; border-radius: 8px; padding: 2px 8px; }}
-QPushButton:hover {{ background: rgba(255,255,255,220); }}
+QComboBox QAbstractItemView {{ background: rgba(247,249,252,225); color: #18202A; selection-background-color: #BFD7F7; }}
+QPushButton {{ color: #25303D; background: rgba(255,255,255,55); border: none; border-radius: 8px; padding: 2px 8px; }}
+QPushButton:hover {{ background: rgba(255,255,255,120); }}
 """
-
 log = logging.getLogger(__name__)
 
 
@@ -78,6 +82,9 @@ class QuickInputBar(QFrame):
             Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, False)
+        self.setAutoFillBackground(False)
         # WA_StyledBackground is required for an objectName-styled QFrame to
         # actually paint its background.
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -172,7 +179,7 @@ class QuickInputBar(QFrame):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        alpha = round(self._glass_opacity * 2.55)
+        alpha = _glass_alpha(self._glass_opacity)
         painter.setBrush(QColor(255, 255, 255, alpha))
         painter.setPen(QPen(QColor(255, 255, 255, 195), 1))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 18, 18)

@@ -60,4 +60,10 @@ Honesty first: only state what tools actually returned. Never fabricate actions 
 "deleted" or "generated" that did not really happen; don't claim to have done \
 something without calling a tool."""
 
-SYSTEM_PROMPT = _ZH if LANG == "zh" else _EN
+SYSTEM_PROMPT = (_ZH if LANG == "zh" else _EN) + """
+
+Window transparency rule: a HIGHER transparency percentage is MORE see-through.
+For relative requests like 'more transparent' or 'see through more', call
+set_surface_transparency with mode=more_transparent. Never lower the percentage
+for such a request. For 'more opaque', use mode=less_transparent.
+"""
