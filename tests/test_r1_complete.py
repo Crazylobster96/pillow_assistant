@@ -168,6 +168,48 @@ def test_orchestrator_chat():
         orch.triage, llm.complete_with_tools = orig_tr, orig_cwt
 
 
+def test_low_confidence_switch_does_not_shadow_triage_result():
+    """A below-threshold cross-project suggestion must fall back to chat."""
+    import pillow_assistant.core.orchestrator as orch
+    original_triage = orch.triage
+
+    async def fake_triage(prompt, index, *, cfg, api_key, current_id=None):
+        return TriageResult(
+            action="continue", project_id=index[0]["id"], confidence=0.5
+        )
+
+    orch.triage = fake_triage
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ProjectStore(directory)
+            store.create("target")
+            session = Session()
+            manager = ProjectManager(store, session)
+
+            class FakeStorage:
+                def get_model_config(self, ref):
+                    return {
+                        "display_name": "m", "provider": "OpenAI", "model": "x",
+                        "base_url": None, "extra": None,
+                    }
+
+            called = []
+            orchestrator = Orchestrator(FakeStorage(), None, manager)
+
+            async def fake_run_chat(*args, **kwargs):
+                called.append(True)
+
+            orchestrator._run_chat = fake_run_chat
+
+            async def emit(event):
+                pass
+
+            asyncio.run(orchestrator(AppRequest(prompt="more transparent", model_ref="m"), emit))
+            assert called == [True]
+            assert session.project_id is None
+    finally:
+        orch.triage = original_triage
+
 if __name__ == "__main__":
     for t in (test_sessions_and_index, test_parse_triage_three_way, test_apply_sessions,
               test_orchestrator_continue, test_orchestrator_chat):

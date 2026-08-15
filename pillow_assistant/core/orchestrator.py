@@ -161,7 +161,7 @@ class Orchestrator:
         if tr.is_chat and current_id is not None:
             sid = getattr(self.pm.session, "session_id", None)
             if (current_id, sid) in self._resume_state:
-                from pillow_assistant.core.triage import TriageResult
+
                 tr = TriageResult(action="continue", project_id=current_id,
                                   confidence=1.0, rationale="resume-pending")
 

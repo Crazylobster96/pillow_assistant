@@ -43,6 +43,37 @@ def white_acrylic_color(opacity: int) -> int:
     tint_alpha = max(1, round(max(10, min(95, opacity)) * 0.12))
     return (tint_alpha << 24) | 0x00FFFFFF
 
+def disable_acrylic(widget) -> bool:
+    """Remove a previously installed Windows accent policy from a widget."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class ACCENTPOLICY(ctypes.Structure):
+            _fields_ = [
+                ("AccentState", ctypes.c_int),
+                ("AccentFlags", ctypes.c_int),
+                ("GradientColor", ctypes.c_uint),
+                ("AnimationId", ctypes.c_int),
+            ]
+
+        class WINCOMPATTRDATA(ctypes.Structure):
+            _fields_ = [
+                ("Attribute", ctypes.c_int),
+                ("Data", ctypes.POINTER(ACCENTPOLICY)),
+                ("SizeOfData", ctypes.c_size_t),
+            ]
+
+        accent = ACCENTPOLICY(0, 0, 0, 0)  # ACCENT_DISABLED
+        data = WINCOMPATTRDATA(19, ctypes.pointer(accent), ctypes.sizeof(accent))
+        set_wca = ctypes.windll.user32.SetWindowCompositionAttribute
+        set_wca.argtypes = [wintypes.HWND, ctypes.POINTER(WINCOMPATTRDATA)]
+        return bool(set_wca(wintypes.HWND(int(widget.winId())), ctypes.byref(data)))
+    except Exception:
+        return False
+
 def enable_acrylic(widget, gradient_color: int = 0x99201A16) -> bool:
     """Enable acrylic blur behind ``widget``. Returns True on success.
 

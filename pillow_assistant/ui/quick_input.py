@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, RequestKind
 from pillow_assistant.core.i18n import t
-from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color
+from pillow_assistant.ui.acrylic import disable_acrylic, glass_opacity, glass_theme_changed
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
 
 
@@ -194,7 +194,7 @@ class QuickInputBar(QFrame):
         self.setStyleSheet(panel_qss(self._glass_opacity))
         self.update()
         if self.isVisible():
-            enable_acrylic(self, white_acrylic_color(self._glass_opacity))
+            disable_acrylic(self)
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self._apply_glass_opacity(glass_opacity())
