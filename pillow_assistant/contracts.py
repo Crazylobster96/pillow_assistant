@@ -63,6 +63,8 @@ class SurfaceSpec(BaseModel):
 class EventType(str, Enum):
     START = "start"
     TOKEN = "token"
+    TOOL_START = "tool_start"
+    TOOL_RESULT = "tool_result"
     SURFACE = "surface"
     DONE = "done"
     ERROR = "error"

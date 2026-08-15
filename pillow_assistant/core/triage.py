@@ -38,6 +38,24 @@ class TriageResult:
         return self.confidence < CONFIDENCE_THRESHOLD
 
 
+_APP_SETTING_PATTERNS = (
+    r"(?:对话|展示|结果|应用|界面|窗口).{0,10}(?:透明度|透明|不透明|磨砂)",
+    r"(?:透明度|磨砂).{0,10}(?:窗口|对话框|展示)",
+    r"(?:模型配置|API\s*配置|接口地址|API\s*Key|默认对话模型)",
+    r"(?:切换|设置|更改).{0,6}(?:界面)?语言",
+    r"(?:最大|工具).{0,4}步数",
+    r"(?:window|dialog|surface).{0,16}(?:transparen|opacity|frosted|acrylic)",
+    r"(?:transparen|opacity|frosted|acrylic).{0,16}(?:window|dialog|surface)",
+    r"(?:model|api)\s+(?:configuration|settings?)",
+    r"(?:change|switch|set)\s+(?:the\s+)?(?:ui\s+)?language",
+)
+
+
+def is_app_setting_request(prompt: str) -> bool:
+    """Return True for assistant-app settings that must never join a project."""
+    text = re.sub(r"\s+", " ", prompt or "").strip()
+    return bool(text) and any(re.search(pattern, text, re.IGNORECASE) for pattern in _APP_SETTING_PATTERNS)
+
 def derive_name(prompt: str, limit: int = 18) -> str:
     text = (prompt or "").strip().splitlines()[0] if prompt.strip() else ""
     text = re.sub(r"\s+", " ", text).strip()
@@ -109,6 +127,8 @@ def _system_prompt() -> str:
 async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional[str],
                  current_id: Optional[str] = None) -> TriageResult:
     """Classify ``prompt`` (chat / continue / new) via the configured model."""
+    if is_app_setting_request(prompt):
+        return TriageResult(action="chat", confidence=1.0, rationale="app-setting")
     listing = "\n".join(
         f'- id={p["id"]} 名称="{p.get("name","")}" 最近="{(p.get("last_prompt") or "")[:60]}"'
         for p in index[:20]

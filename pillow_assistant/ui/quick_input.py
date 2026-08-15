@@ -48,6 +48,11 @@ def panel_qss(opacity: int) -> str:
     return f"""
 QFrame#quickInput {{ background: transparent; border: none; }}
 QLabel {{ color: #18202A; background: transparent; }}
+QLabel#toolStatus {{
+    color: #FFFFFF; background: rgba(24,34,48,235);
+    border: 1px solid rgba(255,255,255,90); border-radius: 9px;
+    padding: 8px 10px; font-weight: bold;
+}}
 QComboBox, QLineEdit {{
     background: rgba(255,255,255,{control_alpha}); color: #18202A;
     border: 1px solid rgba(70,80,95,52); border-radius: 10px; padding: 7px;
@@ -135,6 +140,12 @@ class QuickInputBar(QFrame):
         close_btn.clicked.connect(self.close)
         top.addWidget(close_btn, 0)
         outer.addLayout(top)
+
+        self.tool_status = QLabel(self)
+        self.tool_status.setObjectName("toolStatus")
+        self.tool_status.setWordWrap(True)
+        self.tool_status.hide()
+        outer.addWidget(self.tool_status)
 
         self.response_view = QPlainTextEdit(self)
         self.response_view.setReadOnly(True)
@@ -263,6 +274,8 @@ class QuickInputBar(QFrame):
             references=refs,
         )
         self._active_id = request.id
+        self._had_tool = False
+        self._set_tool_status(t("tool.status.processing"))
         self.response_view.show()
         self.response_view.appendPlainText(f"> {text}\n")
         self.prompt_edit.clear()
@@ -272,30 +285,50 @@ class QuickInputBar(QFrame):
         self._position_grip()
         self.bus.submit(request)
 
+    def _set_tool_status(self, text: str) -> None:
+        self.tool_status.setText(text)
+        self.tool_status.show()
+        self.tool_status.raise_()
     def _on_event(self, event: AgentEvent) -> None:
         if event.request_id != self._active_id:
             return
-        # Guard the whole handler: if a UI bug throws here we still want the
-        # response to be delivered (or at least we want the log entry), not
-        # swallowed silently as a stream of identical tracebacks on stderr.
         try:
-            if event.type == EventType.TOKEN:
-                # PySide6: enum lives on QTextCursor (class), not on the
-                # instance returned by textCursor(). Was the cause of the
-                # "model never replies" symptom — every token crashed here.
+            meta = event.meta or {}
+            if event.type == EventType.START:
+                self._set_tool_status(t("tool.status.processing"))
+            elif event.type == EventType.TOOL_START:
+                self._had_tool = True
+                self._set_tool_status(t(
+                    "tool.status.running",
+                    step=meta.get("step", 1), total=meta.get("total", "?"),
+                    name=meta.get("name") or event.text,
+                ))
+            elif event.type == EventType.ASK:
+                self._set_tool_status(t(
+                    "tool.status.waiting",
+                    name=meta.get("tool_name") or t("tool.status.permission"),
+                ))
+            elif event.type == EventType.TOOL_RESULT:
+                self._had_tool = True
+                result = (event.text or "").strip()
+                if len(result) > 500:
+                    result = result[:500] + "..."
+                key = "tool.status.ok" if meta.get("ok") else "tool.status.failed"
+                self._set_tool_status(t(key, name=meta.get("name") or "-", result=result))
+            elif event.type == EventType.TOKEN:
                 self.response_view.moveCursor(QTextCursor.MoveOperation.End)
                 self.response_view.insertPlainText(event.text)
             elif event.type == EventType.ERROR:
+                self._set_tool_status(t("tool.status.error", result=event.text))
                 self.response_view.appendPlainText(f"\n{t('common.error_prefix')} {event.text}")
                 self._finish()
             elif event.type == EventType.DONE:
+                if not getattr(self, "_had_tool", False):
+                    self._set_tool_status(t("tool.status.complete"))
                 self.response_view.appendPlainText("\n")
                 self._finish()
         except Exception:
-            # Keep the response stream alive even if one event throws —
-            # don't let a UI glitch hide the model's reply.
             log.exception("QuickInputBar._on_event failed (event=%s)", event.type)
-
     def _finish(self) -> None:
         self._active_id = None
         self.prompt_edit.setEnabled(bool(self.models))

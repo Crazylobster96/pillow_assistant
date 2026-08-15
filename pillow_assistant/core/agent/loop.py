@@ -123,12 +123,29 @@ class ToolLoopAgent:
             args = json.loads(tc.arguments or "{}")
         except ValueError:
             args = {}
+        step = getattr(self, "_step", 1)
+        await emit(AgentEvent(
+            request_id=request_id,
+            type=EventType.TOOL_START,
+            text=tc.name,
+            meta={"name": tc.name, "step": step, "total": self.max_steps},
+        ))
         await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN,
-                              text=t("loop.step", k=getattr(self, "_step", 1),
-                                     n=self.max_steps, name=tc.name)))
+                              text=t("loop.step", k=step, n=self.max_steps, name=tc.name)))
         t0 = time.time()
         result = await self.registry.dispatch(tc.name, args, self.ctx)
         summary = result.text
+        await emit(AgentEvent(
+            request_id=request_id,
+            type=EventType.TOOL_RESULT,
+            text=summary,
+            meta={
+                "name": tc.name,
+                "step": step,
+                "total": self.max_steps,
+                "ok": bool(getattr(result, "ok", False)),
+            },
+        ))
         self._artifacts.extend(getattr(result, "artifacts", None) or [])
         audit = getattr(self.ctx, "audit", None)
         if audit is not None:

@@ -19,7 +19,7 @@ from pillow_assistant.core import llm
 from pillow_assistant.core.orchestrator import Orchestrator
 from pillow_assistant.core.project_manager import ProjectManager
 from pillow_assistant.core.session import Session
-from pillow_assistant.core.triage import TriageResult, parse_triage
+from pillow_assistant.core.triage import TriageResult, is_app_setting_request, parse_triage
 from storage.projects import ProjectStore
 
 PASS, FAIL = 0, 0
@@ -52,6 +52,13 @@ def test_sessions_and_index():
         idx = store.index()
         check("index last_prompt", idx and idx[0]["last_prompt"] == "另一个问题")
 
+
+def test_app_settings_never_attach_to_projects():
+    assert is_app_setting_request("将对话窗口的透明度调整至 15%")
+    assert is_app_setting_request("展示窗口再透明一点")
+    assert is_app_setting_request("change window opacity to 40%")
+    assert is_app_setting_request("设置默认对话模型")
+    assert not is_app_setting_request("继续完善 Web 播放器的播放列表")
 
 def test_parse_triage_three_way():
     print("parse_triage (chat / continue / new)")

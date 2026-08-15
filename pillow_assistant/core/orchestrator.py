@@ -158,7 +158,7 @@ class Orchestrator:
 
         # A paused (step-limited) run takes precedence over triage for short
         # follow-ups like「继续」: route back to the project holding the state.
-        if tr.is_chat and current_id is not None:
+        if tr.is_chat and tr.rationale != "app-setting" and current_id is not None:
             sid = getattr(self.pm.session, "session_id", None)
             if (current_id, sid) in self._resume_state:
 

@@ -11,13 +11,16 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from pillow_assistant.contracts import EventType
+from pillow_assistant.core.agent.loop import ToolLoopAgent
 from pillow_assistant.core.model_router import select_model
 from pillow_assistant.core.observability import AuditLog
-from pillow_assistant.core.tools.base import ToolContext
+from pillow_assistant.core.tools.base import ToolContext, ToolResult
 from pillow_assistant.core.tools.builtin import build_default_registry
 from pillow_assistant.core.i18n import t
 
@@ -65,6 +68,32 @@ def test_audit_log():
         secret_rec = json.loads((Path(d) / "sub" / "audit.jsonl").read_text("utf-8").splitlines()[-1])
         check("tool secrets redacted", "secret-value" not in secret_rec["args"] and "[redacted]" in secret_rec["args"])
 
+
+def test_tool_progress_events():
+    class FakeRegistry:
+        async def dispatch(self, name, args, ctx):
+            return ToolResult(ok=True, text="saved")
+
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    async def run():
+        agent = ToolLoopAgent({}, None, FakeRegistry(), ToolContext(workspace=Path(".")), max_steps=4)
+        agent._step = 2
+        agent._artifacts = []
+        call = SimpleNamespace(name="demo_tool", arguments="{}")
+        result = await agent._run_tool(call, emit, "request-1")
+        assert result == "saved"
+
+    asyncio.run(run())
+    starts = [event for event in events if event.type == EventType.TOOL_START]
+    results = [event for event in events if event.type == EventType.TOOL_RESULT]
+    assert len(starts) == len(results) == 1
+    assert starts[0].meta == {"name": "demo_tool", "step": 2, "total": 4}
+    assert results[0].text == "saved"
+    assert results[0].meta["ok"] is True
 
 def test_browser_tool():
     print("browser_read guards / degradation")
