@@ -1,7 +1,9 @@
 """Tests: model roles persistence, role-aware routing, self-config tools."""
 
 import asyncio
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from pillow_assistant.core.model_roles import assign, load_roles, save_roles
 from pillow_assistant.core.model_router import select_model
@@ -11,6 +13,7 @@ from pillow_assistant.core.tools.builtin.config_tools import (
     ConfigureModelTool,
     ListModelsTool,
     SetLanguageTool,
+    SetSurfaceTransparencyTool,
 )
 
 CFGS = [
@@ -122,3 +125,38 @@ def test_set_language_roundtrip():
         assert i18n.t("menu.quit") == "退出"
     finally:
         i18n.set_language(old)
+
+
+def test_surface_transparency_exact_endpoints(tmp_path, monkeypatch):
+    import pillow_assistant.core.settings as settings
+
+    state = {"surface_glass_opacity": 68}
+    notified = []
+    monkeypatch.setattr(settings, "load_settings", lambda: dict(state))
+    monkeypatch.setattr(settings, "set_setting", lambda key, value: state.__setitem__(key, value))
+    monkeypatch.setitem(
+        sys.modules,
+        "pillow_assistant.ui.acrylic",
+        SimpleNamespace(notify_glass_opacity=notified.append),
+    )
+
+    tool = SetSurfaceTransparencyTool()
+    ctx = ToolContext(workspace=Path(tmp_path))
+    cases = (
+        ({"mode": "set", "transparency": 100}, 0, "transparency is now 100%"),
+        ({"mode": "set", "transparency": 0}, 100, "transparency is now 0%"),
+        ({"mode": "set", "opacity": 100}, 100, "background opacity 100%"),
+        ({"mode": "set", "opacity": 0}, 0, "background opacity 0%"),
+    )
+    for args, expected_opacity, expected_text in cases:
+        result = asyncio.run(tool(args, ctx))
+        assert result.ok
+        assert state["surface_glass_opacity"] == expected_opacity
+        assert notified[-1] == expected_opacity
+        assert expected_text in result.text
+
+    result = asyncio.run(
+        tool({"mode": "set", "transparency": 50, "opacity": 50}, ctx)
+    )
+    assert not result.ok
+    assert "exactly one" in result.text

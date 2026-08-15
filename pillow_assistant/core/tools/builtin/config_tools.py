@@ -176,10 +176,11 @@ class SetSurfaceTransparencyTool:
     name = "set_surface_transparency"
     permission = Permission.SYSTEM
     description = (
-        "Adjust frosted-glass TRANSPARENCY (not opacity). For relative wording "
-        "such as 'more transparent', 'more see-through', or Chinese equivalents, "
-        "ALWAYS use mode='more_transparent'. For 'less transparent' or 'more opaque', "
-        "use mode='less_transparent'. Use mode='set' only for an explicit percentage."
+        "Adjust the frosted-glass background. Opacity and transparency are exact "
+        "complements: opacity + transparency = 100. Opacity 100 is fully opaque; "
+        "opacity 0 is fully transparent. Transparency 100 is fully transparent; "
+        "transparency 0 is fully opaque. For relative wording such as 'more transparent', "
+        "use mode='more_transparent'; for 'more opaque', use mode='less_transparent'."
     )
     parameters = {
         "type": "object",
@@ -187,11 +188,15 @@ class SetSurfaceTransparencyTool:
             "mode": {
                 "type": "string",
                 "enum": ["set", "more_transparent", "less_transparent"],
-                "description": "Relative requests must use more_transparent or less_transparent.",
+                "description": "Use set for an explicit opacity or transparency percentage.",
             },
             "transparency": {
-                "type": "integer", "minimum": 5, "maximum": 90,
-                "description": "Only for mode=set. Higher means more see-through: 90 is very transparent.",
+                "type": "integer", "minimum": 0, "maximum": 100,
+                "description": "Only for mode=set. 0 is fully opaque; 100 is fully transparent.",
+            },
+            "opacity": {
+                "type": "integer", "minimum": 0, "maximum": 100,
+                "description": "Only for mode=set. 0 is fully transparent; 100 is fully opaque.",
             },
             "amount": {
                 "type": "integer", "minimum": 1, "maximum": 40,
@@ -205,27 +210,43 @@ class SetSurfaceTransparencyTool:
         mode = (args.get("mode") or "").strip().lower()
         from pillow_assistant.core.settings import load_settings, set_setting
         try:
-            current_opacity = max(10, min(95, int(load_settings().get("surface_glass_opacity", 68))))
+            current_opacity = max(0, min(100, int(load_settings().get("surface_glass_opacity", 68))))
         except (TypeError, ValueError):
             current_opacity = 68
-        current = 100 - current_opacity
+        current_transparency = 100 - current_opacity
 
         if mode == "set":
+            has_transparency = args.get("transparency") is not None
+            has_opacity = args.get("opacity") is not None
+            if has_transparency == has_opacity:
+                return ToolResult(
+                    ok=False,
+                    text="mode=set requires exactly one of transparency or opacity, from 0 to 100.",
+                )
             try:
-                transparency = int(args.get("transparency"))
+                if has_transparency:
+                    transparency = int(args["transparency"])
+                else:
+                    opacity = int(args["opacity"])
+                    transparency = 100 - opacity
             except (TypeError, ValueError):
-                return ToolResult(ok=False, text="mode=set requires transparency from 5 to 90.")
+                return ToolResult(ok=False, text="The percentage must be an integer from 0 to 100.")
+            if not 0 <= transparency <= 100:
+                return ToolResult(ok=False, text="The percentage must be from 0 to 100.")
         elif mode in ("more_transparent", "less_transparent"):
             try:
                 amount = int(args.get("amount", 15))
             except (TypeError, ValueError):
                 amount = 15
             amount = max(1, min(40, amount))
-            transparency = current + amount if mode == "more_transparent" else current - amount
+            if mode == "more_transparent":
+                transparency = current_transparency + amount
+            else:
+                transparency = current_transparency - amount
         else:
             return ToolResult(ok=False, text="mode must be set, more_transparent, or less_transparent.")
 
-        transparency = max(5, min(90, transparency))
+        transparency = max(0, min(100, transparency))
         opacity = 100 - transparency
         set_setting("surface_glass_opacity", opacity)
         from pillow_assistant.ui.acrylic import notify_glass_opacity

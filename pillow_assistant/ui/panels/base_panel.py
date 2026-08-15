@@ -14,7 +14,7 @@ from typing import Optional
 from PySide6.QtCore import QEvent, QRect, Qt
 
 from pillow_assistant.core.i18n import t
-from pillow_assistant.ui.acrylic import enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color
+from pillow_assistant.ui.acrylic import disable_acrylic, enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -74,7 +74,7 @@ from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, Reques
 
 def panel_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
-    control_alpha = min(225, alpha + 18)
+    control_alpha = 0 if alpha == 0 else min(255, alpha + 18)
     return f"""
 QFrame#filePanel {{ background: rgba(255,255,255,{alpha}); border: 1px solid rgba(255,255,255,195); border-radius: 18px; }}
 QLabel {{ color: #18202A; background: transparent; }}
@@ -284,10 +284,13 @@ class FilePanel(QFrame):
         self._on_resized()
 
     def _apply_glass_opacity(self, opacity: int) -> None:
-        self._glass_opacity = max(10, min(95, int(opacity)))
+        self._glass_opacity = max(0, min(100, int(opacity)))
         self.setStyleSheet(panel_qss(self._glass_opacity))
         if self.isVisible():
-            enable_acrylic(self, white_acrylic_color(self._glass_opacity))
+            if self._glass_opacity == 0:
+                disable_acrylic(self)
+            else:
+                enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self._position_grip()

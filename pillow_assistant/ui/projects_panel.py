@@ -18,7 +18,7 @@ from PySide6.QtGui import QColor, QDesktopServices
 
 from pillow_assistant.core.i18n import t
 from pillow_assistant.ui.acrylic import (
-    enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color,
+    disable_acrylic, enable_acrylic, glass_opacity, glass_theme_changed, white_acrylic_color,
 )
 from PySide6.QtWidgets import (
     QDialog,
@@ -75,7 +75,7 @@ class _ConfirmDialog(QDialog):
 
 def panel_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
-    control_alpha = min(225, alpha + 18)
+    control_alpha = 0 if alpha == 0 else min(255, alpha + 18)
     return f"""
 QWidget#projectsRoot {{
     background: rgba(255,255,255,{alpha});
@@ -344,10 +344,13 @@ class ProjectsPanel(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(project.workspace)))
 
     def _apply_glass_opacity(self, opacity: int) -> None:
-        self._glass_opacity = max(10, min(95, int(opacity)))
+        self._glass_opacity = max(0, min(100, int(opacity)))
         self.setStyleSheet(panel_qss(self._glass_opacity))
         if self.isVisible():
-            enable_acrylic(self, white_acrylic_color(self._glass_opacity))
+            if self._glass_opacity == 0:
+                disable_acrylic(self)
+            else:
+                enable_acrylic(self, white_acrylic_color(self._glass_opacity))
     # -- auto-dismiss -------------------------------------------------------
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

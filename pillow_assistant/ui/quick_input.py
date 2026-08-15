@@ -36,15 +36,15 @@ from pillow_assistant.ui.panels.base_panel import _CornerGrip
 # box and the answer view are each their own dark, semi-transparent piece —
 # translucent enough to read as glass, opaque enough to keep text legible.
 def _glass_alpha(opacity: int) -> int:
-    """Subtle non-linear tint: desktop stays visible at normal settings."""
-    normalized = max(10, min(95, opacity)) / 100.0
-    return round(255 * normalized * normalized * 0.65)
+    """Map 0..100 opacity to exact transparent/opaque alpha endpoints."""
+    normalized = max(0, min(100, opacity)) / 100.0
+    return round(255 * normalized)
 
 
 def panel_qss(opacity: int) -> str:
     glass_alpha = _glass_alpha(opacity)
     # Controls add only a very thin layer on top of the glass background.
-    control_alpha = max(3, round(glass_alpha * 0.15))
+    control_alpha = 0 if glass_alpha == 0 else max(3, round(glass_alpha * 0.15))
     return f"""
 QFrame#quickInput {{ background: transparent; border: none; }}
 QLabel {{ color: #18202A; background: transparent; }}
@@ -201,7 +201,7 @@ class QuickInputBar(QFrame):
         self._position_grip()
 
     def _apply_glass_opacity(self, opacity: int) -> None:
-        self._glass_opacity = max(10, min(95, int(opacity)))
+        self._glass_opacity = max(0, min(100, int(opacity)))
         self.setStyleSheet(panel_qss(self._glass_opacity))
         self.update()
         if self.isVisible():

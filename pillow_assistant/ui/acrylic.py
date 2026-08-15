@@ -31,7 +31,7 @@ def glass_opacity() -> int:
     """Return the persisted white-glass opacity percentage."""
     from pillow_assistant.core.settings import load_settings
     try:
-        return max(10, min(95, int(load_settings().get("surface_glass_opacity", 68))))
+        return max(0, min(100, int(load_settings().get("surface_glass_opacity", 68))))
     except (TypeError, ValueError):
         return 68
 
@@ -40,7 +40,7 @@ def white_acrylic_color(opacity: int) -> int:
     """Convert an opacity percentage to Windows AABBGGRR white tint."""
     # Keep the compositor tint subtle: Qt paints the visible glass layer.
     # Using the full opacity here would stack two white layers.
-    tint_alpha = max(1, round(max(10, min(95, opacity)) * 0.12))
+    tint_alpha = round(max(0, min(100, opacity)) * 0.12)
     return (tint_alpha << 24) | 0x00FFFFFF
 
 def disable_acrylic(widget) -> bool:

@@ -62,8 +62,10 @@ something without calling a tool."""
 
 SYSTEM_PROMPT = (_ZH if LANG == "zh" else _EN) + """
 
-Window transparency rule: a HIGHER transparency percentage is MORE see-through.
-For relative requests like 'more transparent' or 'see through more', call
-set_surface_transparency with mode=more_transparent. Never lower the percentage
-for such a request. For 'more opaque', use mode=less_transparent.
+Window background rule: opacity + transparency = 100. Opacity 100% is fully opaque;
+opacity 0% is fully transparent. Transparency 100% is fully transparent;
+transparency 0% is fully opaque. For relative requests like 'more transparent' or
+'see through more', call set_surface_transparency with mode=more_transparent. Never
+lower transparency for such a request. For 'more opaque', use mode=less_transparent.
+For an explicit value, use mode=set and pass exactly one of opacity or transparency.
 """
