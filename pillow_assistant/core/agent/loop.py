@@ -11,6 +11,7 @@ import time
 from typing import Any, Awaitable, Callable, Optional
 
 from pillow_assistant.contracts import AgentEvent, EventType, SurfaceLevel, SurfaceSpec
+from pillow_assistant.core.context_budget import join_context_and_prompt
 from pillow_assistant.core import llm
 from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT
 from pillow_assistant.core.i18n import t
@@ -43,7 +44,7 @@ class ToolLoopAgent:
         extra = llm.parse_extra(self.cfg.get("extra"))
         tools = self.registry.schemas()
 
-        user_text = f"{context}\n\n{prompt}" if context else prompt
+        user_text = join_context_and_prompt(context, prompt)
         if resume_messages:
             # Continue an interrupted run (hit the step limit last time): keep
             # the full transcript incl. tool calls/results, append the new ask.
@@ -72,6 +73,8 @@ class ToolLoopAgent:
                 provider=provider, model=model, messages=messages, tools=tools,
                 api_key=self.api_key, api_base=api_base, extra=extra,
             )
+            if getattr(turn, "managed_messages", None) is not None:
+                messages = list(turn.managed_messages)
             if not turn.tool_calls:
                 final_text = turn.content or ""
                 if final_text:

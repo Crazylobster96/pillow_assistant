@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable
 
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, SurfaceLevel, SurfaceSpec
 from pillow_assistant.core import llm, references
+from pillow_assistant.core.context_budget import join_context_and_prompt
 from pillow_assistant.core.llm_log import log_llm_call
 
 Emit = Callable[[AgentEvent], Awaitable[None]]
@@ -39,7 +40,7 @@ class LLMHandler:
 
         # Turn referenced files/folders into bounded prompt context + image attachments.
         context_text, ref_images = references.materialize(request.references)
-        prompt = f"{context_text}\n\n{request.prompt}" if context_text else request.prompt
+        prompt = join_context_and_prompt(context_text, request.prompt)
         image_paths = ([request.image_path] if request.image_path else []) + ref_images
 
         await emit(AgentEvent(request_id=request.id, type=EventType.START))
