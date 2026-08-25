@@ -6,6 +6,7 @@ models for different work:
   * ``chat``   -> display_name of the default conversation/agent model
   * ``vision`` -> display_name of the model used when images are involved
   * ``asr``    -> {"backend": "sensevoice"|"whisper", "model": "<whisper size>"}
+  * ``compression`` -> display_name of the semantic context compressor model
 
 Stored in ``~/.pillow/model_roles.json``; consulted by the model router, the
 ASR module and the UI's default model selection.
@@ -17,7 +18,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-ROLES = ("chat", "vision", "asr")
+ROLES = ("chat", "vision", "asr", "compression")
 
 
 def roles_path() -> Path:

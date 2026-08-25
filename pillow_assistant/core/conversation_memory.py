@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from pillow_assistant.core import llm
+from pillow_assistant.core.context_budget import join_context_and_prompt
 from storage.conversation import ConversationMemoryStore
 
 
@@ -126,10 +127,14 @@ class ConversationRouter:
                 "One-off factual questions should be one_off_qa unless they clearly continue an existing topic. "
                 "Prefer continuing the most recent related topic; create a new topic only when the subject clearly changes."
             )},
-            {"role": "user", "content": (
-                f"Recent topics:\n{listing}\n\nUser message:\n{prompt}\n\n"
-                '{"kind":"greeting|one_off_qa|existing_topic|new_topic","topic_id":null,'
-                '"title":null,"summary":null,"keywords":[],"confidence":0.0,"reason":"brief"}'
+            {"role": "user", "content": join_context_and_prompt(
+                f"Recent topics:\n{listing}",
+                (
+                    f"User message:\n{prompt}\n\n"
+                    "Classify this request using the supporting topic list and return this JSON schema only:\n"
+                    '{"kind":"greeting|one_off_qa|existing_topic|new_topic","topic_id":null,'
+                    '"title":null,"summary":null,"keywords":[],"confidence":0.0,"reason":"brief"}'
+                ),
             )},
         ]
         try:
@@ -284,9 +289,13 @@ class ConversationWriteback:
     async def _summarize(self, prompt: str, answer: str, *, cfg: dict, api_key: Optional[str]) -> dict:
         messages = [
             {"role": "system", "content": "Summarize this conversation turn as JSON only."},
-            {"role": "user", "content": (
-                f"User:\n{prompt}\n\nAssistant:\n{answer}\n\n"
-                '{"user_summary":"","assistant_summary":"","topic_summary":"","keywords":[],"topic_keywords":[],"importance":0.0}'
+            {"role": "user", "content": join_context_and_prompt(
+                f"User:\n{prompt}\n\nAssistant:\n{answer}",
+                (
+                    "Summarize the supporting conversation turn and return this JSON schema only:\n"
+                    '{"user_summary":"","assistant_summary":"","topic_summary":"","keywords":[],'
+                    '"topic_keywords":[],"importance":0.0}'
+                ),
             )},
         ]
         try:
@@ -311,7 +320,10 @@ class ConversationWriteback:
                 "Return [] if none. Types: preference, frequent_need, frequent_tool, schedule_candidate. "
                 "Schedule/reminder candidates must needs_confirmation=true and status=candidate."
             )},
-            {"role": "user", "content": text},
+            {"role": "user", "content": join_context_and_prompt(
+                text,
+                "Extract reusable user memory signals from the supporting conversation. Return a JSON array only.",
+            )},
         ]
         try:
             raw = await llm.complete(

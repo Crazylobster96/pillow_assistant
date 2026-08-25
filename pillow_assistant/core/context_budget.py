@@ -86,6 +86,12 @@ class ContextManagementResult:
     dropped_rounds: int = 0
     shortened_messages: int = 0
     emergency: bool = False
+    semantic_compressed: bool = False
+    semantic_verified: bool = False
+    semantic_status: str = "not-requested"
+    semantic_source_tokens: int = 0
+    semantic_source_count: int = 0
+    semantic_chunk_count: int = 0
 
     def diagnostics(self) -> dict[str, Any]:
         return {
@@ -98,6 +104,12 @@ class ContextManagementResult:
             "dropped_rounds": self.dropped_rounds,
             "shortened_messages": self.shortened_messages,
             "emergency": self.emergency,
+            "semantic_compressed": self.semantic_compressed,
+            "semantic_verified": self.semantic_verified,
+            "semantic_status": self.semantic_status,
+            "semantic_source_tokens": self.semantic_source_tokens,
+            "semantic_source_count": self.semantic_source_count,
+            "semantic_chunk_count": self.semantic_chunk_count,
         }
 
 

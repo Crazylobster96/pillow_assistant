@@ -101,6 +101,8 @@ def test_assign_role(tmp_path, monkeypatch):
     assert not asyncio.run(tool({"role": "chat", "model": "Nope"}, ctx)).ok  # unknown model
     assert asyncio.run(tool({"role": "chat", "model": "Old"}, ctx)).ok
     assert mr.load_roles()["chat"] == "Old"
+    assert asyncio.run(tool({"role": "compression", "model": "Old"}, ctx)).ok
+    assert mr.load_roles()["compression"] == "Old"
     assert not asyncio.run(tool({"role": "asr", "model": "siri"}, ctx)).ok  # bad backend
     assert asyncio.run(tool({"role": "asr", "model": "whisper", "whisper_size": "medium"}, ctx)).ok
     assert mr.load_roles()["asr"] == {"backend": "whisper", "model": "medium"}

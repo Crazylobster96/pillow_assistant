@@ -1,4 +1,4 @@
-"""Thin LiteLLM wrapper with non-blocking context-budget management."""
+"""Thin LiteLLM wrapper with model-assisted context management."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
-from pillow_assistant.core import context_budget
+from pillow_assistant.core import context_budget, semantic_context
 
 
 def resolve_model_string(provider: str, model: str) -> str:
@@ -109,27 +109,167 @@ def _is_context_length_error(exc: Exception) -> bool:
     ))
 
 
-def _managed_request(
+def _semantic_profile(
+    *,
+    provider: str,
+    model: str,
+    api_base: Optional[str],
+    api_key: Optional[str],
+    completion_extra: dict[str, Any],
+    context_config: dict[str, Any],
+    semantic_profile: Optional[dict[str, Any]],
+) -> dict[str, Any]:
+    raw = context_config.get("semantic_compression", {})
+    raw = raw if isinstance(raw, dict) else {}
+    runtime = dict(semantic_profile or {})
+    compressor_provider = runtime.get("provider") or raw.get("provider") or provider
+    compressor_model = runtime.get("model") or raw.get("model") or model
+    compressor_base = (
+        runtime.get("api_base")
+        if "api_base" in runtime
+        else raw.get("api_base", api_base)
+    )
+    same_connection = (
+        str(compressor_provider or "").strip().lower() == str(provider or "").strip().lower()
+        and str(compressor_base or "").strip() == str(api_base or "").strip()
+    )
+    if "api_key" in runtime:
+        compressor_key = runtime.get("api_key")
+    else:
+        compressor_key = api_key if same_connection else None
+
+    if isinstance(runtime.get("extra"), dict):
+        profile_extra = dict(runtime["extra"])
+    elif isinstance(raw.get("extra"), dict):
+        profile_extra = dict(raw["extra"])
+    elif same_connection:
+        profile_extra = dict(completion_extra)
+    else:
+        profile_extra = {}
+    profile_extra, _ = _split_context_config(profile_extra)
+    for key in (
+        "model", "messages", "stream", "tools", "tool_choice", "api_key", "api_base",
+        "max_tokens", "max_completion_tokens", "temperature", "response_format",
+    ):
+        profile_extra.pop(key, None)
+    return {
+        "provider": compressor_provider,
+        "model": compressor_model,
+        "api_base": compressor_base,
+        "api_key": compressor_key,
+        "extra": profile_extra,
+        "profile_key": context_budget.model_profile_key(
+            str(compressor_provider), compressor_base, str(compressor_model)
+        ),
+    }
+
+
+def _cap_semantic_chunk_size(
+    context_config: dict[str, Any], compressor_info: dict[str, Any]
+) -> dict[str, Any]:
+    """Keep compressor input + output inside the compressor model's own window."""
+    config = dict(context_config)
+    raw = config.get("semantic_compression", {})
+    if raw is False:
+        return config
+    semantic = dict(raw) if isinstance(raw, dict) else {}
+    try:
+        known_input = int(
+            compressor_info.get("max_input_tokens")
+            or compressor_info.get("max_context_tokens")
+            or compressor_info.get("max_tokens")
+            or 0
+        )
+    except (TypeError, ValueError):
+        known_input = 0
+    if known_input > 0:
+        try:
+            requested_chunk = int(semantic.get("chunk_tokens") or 24_000)
+        except (TypeError, ValueError):
+            requested_chunk = 24_000
+        semantic["chunk_tokens"] = min(
+            requested_chunk, max(2_048, int(known_input * 0.55))
+        )
+        try:
+            known_output = int(compressor_info.get("max_output_tokens") or 0)
+        except (TypeError, ValueError):
+            known_output = 0
+        output_cap = known_output or max(512, int(known_input * 0.20))
+        try:
+            chunk_summary = int(semantic.get("chunk_summary_tokens") or 2_048)
+            final_summary = int(semantic.get("summary_max_tokens") or 6_000)
+        except (TypeError, ValueError):
+            chunk_summary, final_summary = 2_048, 6_000
+        semantic["chunk_summary_tokens"] = min(chunk_summary, max(512, output_cap))
+        semantic["summary_max_tokens"] = min(final_summary, max(768, output_cap))
+        config["semantic_compression"] = semantic
+    return config
+
+
+async def _managed_request(
     litellm_module,
     *,
     provider: str,
     model: str,
+    api_key: Optional[str],
     api_base: Optional[str],
     messages: list[dict[str, Any]],
     tools: Optional[list[dict[str, Any]]],
     completion_extra: dict[str, Any],
     context_config: dict[str, Any],
+    semantic_profile: Optional[dict[str, Any]] = None,
     emergency: bool = False,
 ):
-    return context_budget.get_context_manager().prepare(
+    profile = _semantic_profile(
+        provider=provider,
+        model=model,
+        api_base=api_base,
+        api_key=api_key,
+        completion_extra=completion_extra,
+        context_config=context_config,
+        semantic_profile=semantic_profile,
+    )
+    compressor_model_string = resolve_model_string(profile["provider"], profile["model"])
+    compressor_info = _model_info(litellm_module, compressor_model_string)
+    managed_context_config = _cap_semantic_chunk_size(context_config, compressor_info)
+
+    async def semantic_completion(
+        compressor_messages: list[dict[str, Any]], max_tokens: int
+    ) -> str:
+        kwargs = dict(profile["extra"])
+        kwargs.update({
+            "model": compressor_model_string,
+            "messages": compressor_messages,
+            "stream": False,
+            "temperature": 0,
+            "max_tokens": max_tokens,
+        })
+        if profile.get("api_key"):
+            kwargs["api_key"] = profile["api_key"]
+        if profile.get("api_base"):
+            kwargs["api_base"] = profile["api_base"]
+        response = await litellm_module.acompletion(**kwargs)
+        content = getattr(response.choices[0].message, "content", "")
+        if isinstance(content, list):
+            return "".join(
+                str(block.get("text") or "") if isinstance(block, dict) else str(block)
+                for block in content
+            )
+        return str(content or "")
+
+    model_string = resolve_model_string(provider, model)
+    return await semantic_context.get_semantic_coordinator().manage(
+        manager=context_budget.get_context_manager(),
         provider=provider,
         api_base=api_base,
         model=model,
         messages=messages,
         tools=tools,
-        model_info=_model_info(litellm_module, resolve_model_string(provider, model)),
-        context_config=context_config,
+        model_info=_model_info(litellm_module, model_string),
+        context_config=managed_context_config,
         completion_extra=completion_extra,
+        compressor_key=profile["profile_key"],
+        completion_call=semantic_completion,
         emergency=emergency,
     )
 
@@ -143,23 +283,26 @@ async def stream_completion(
     api_base: Optional[str] = None,
     image_paths: Optional[list[str]] = None,
     extra: Optional[dict[str, Any]] = None,
+    semantic_profile: Optional[dict[str, Any]] = None,
 ) -> AsyncIterator[str]:
-    """Yield response tokens via LiteLLM, compacting large inputs first."""
+    """Yield response tokens via LiteLLM, semantically compressing large inputs first."""
     import litellm
 
     model_string = resolve_model_string(provider, model)
     messages = build_messages(prompt, image_paths)
     completion_extra, context_config = _split_context_config(extra)
     manager = context_budget.get_context_manager()
-    managed = _managed_request(
+    managed = await _managed_request(
         litellm,
         provider=provider,
         model=model,
+        api_key=api_key,
         api_base=api_base,
         messages=messages,
         tools=None,
         completion_extra=completion_extra,
         context_config=context_config,
+        semantic_profile=semantic_profile,
     )
     kwargs: dict[str, Any] = {"model": model_string, "messages": managed.messages, "stream": True}
     if api_key:
@@ -174,15 +317,17 @@ async def stream_completion(
     except Exception as exc:
         if not _is_context_length_error(exc):
             raise
-        managed = _managed_request(
+        managed = await _managed_request(
             litellm,
             provider=provider,
             model=model,
+            api_key=api_key,
             api_base=api_base,
-            messages=messages,
+            messages=managed.messages,
             tools=None,
             completion_extra=completion_extra,
             context_config=context_config,
+            semantic_profile=semantic_profile,
             emergency=True,
         )
         kwargs["messages"] = managed.messages
@@ -227,6 +372,7 @@ async def complete_with_tools(
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     extra: Optional[dict[str, Any]] = None,
+    semantic_profile: Optional[dict[str, Any]] = None,
 ) -> ToolTurn:
     """One non-streaming completion that may request tool calls."""
     import litellm
@@ -234,15 +380,17 @@ async def complete_with_tools(
     model_string = resolve_model_string(provider, model)
     completion_extra, context_config = _split_context_config(extra)
     manager = context_budget.get_context_manager()
-    managed = _managed_request(
+    managed = await _managed_request(
         litellm,
         provider=provider,
         model=model,
+        api_key=api_key,
         api_base=api_base,
         messages=messages,
         tools=tools,
         completion_extra=completion_extra,
         context_config=context_config,
+        semantic_profile=semantic_profile,
     )
     kwargs: dict[str, Any] = {"model": model_string, "messages": managed.messages}
     if tools:
@@ -260,15 +408,17 @@ async def complete_with_tools(
     except Exception as exc:
         if not _is_context_length_error(exc):
             raise
-        managed = _managed_request(
+        managed = await _managed_request(
             litellm,
             provider=provider,
             model=model,
+            api_key=api_key,
             api_base=api_base,
-            messages=messages,
+            messages=managed.messages,
             tools=tools,
             completion_extra=completion_extra,
             context_config=context_config,
+            semantic_profile=semantic_profile,
             emergency=True,
         )
         kwargs["messages"] = managed.messages
@@ -297,6 +447,7 @@ async def complete(
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     extra: Optional[dict[str, Any]] = None,
+    semantic_profile: Optional[dict[str, Any]] = None,
 ) -> str:
     """Single non-streaming completion returning plain text (no tools)."""
     turn = await complete_with_tools(
@@ -307,5 +458,6 @@ async def complete(
         api_key=api_key,
         api_base=api_base,
         extra=extra,
+        semantic_profile=semantic_profile,
     )
     return turn.content or ""

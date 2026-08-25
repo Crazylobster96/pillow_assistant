@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, SurfaceLevel, SurfaceSpec
 from pillow_assistant.core import llm, references
 from pillow_assistant.core.context_budget import join_context_and_prompt
+from pillow_assistant.core.semantic_context import resolve_compression_profile
 from pillow_assistant.core.llm_log import log_llm_call
 
 Emit = Callable[[AgentEvent], Awaitable[None]]
@@ -37,6 +38,7 @@ class LLMHandler:
 
         api_key = self.vault.get_secret(cfg["display_name"]) if self.vault else None
         extra = llm.parse_extra(cfg.get("extra"))
+        semantic_profile = resolve_compression_profile(self.storage, self.vault, cfg)
 
         # Turn referenced files/folders into bounded prompt context + image attachments.
         context_text, ref_images = references.materialize(request.references)
@@ -69,6 +71,7 @@ class LLMHandler:
                 api_base=api_base,
                 image_paths=image_paths or None,
                 extra=extra,
+                semantic_profile=semantic_profile,
             ):
                 chunks.append(token)
                 # Keep the log's partial_response live so a mid-stream crash

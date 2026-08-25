@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pillow_assistant.core import llm
+from pillow_assistant.core.context_budget import join_context_and_prompt
 
 CONFIDENCE_THRESHOLD = 0.6
 
@@ -138,7 +139,13 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
         hint = f"\n当前正在进行的项目 id={current_id}（若是它的延续工作，倾向 continue 该 id）。"
     messages = [
         {"role": "system", "content": _system_prompt()},
-        {"role": "user", "content": f"已有项目：\n{listing}{hint}\n\n新请求：{prompt}"},
+        {"role": "user", "content": join_context_and_prompt(
+            f"已有项目：\n{listing}{hint}",
+            (
+                f"新请求：{prompt}\n\n"
+                "请根据支持材料完成项目分诊，并严格按系统消息要求只返回 JSON。"
+            ),
+        )},
     ]
     try:
         text = await llm.complete(

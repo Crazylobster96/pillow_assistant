@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Optional
 from pillow_assistant.contracts import AgentEvent, EventType, SurfaceLevel, SurfaceSpec
 from pillow_assistant.core.context_budget import join_context_and_prompt
 from pillow_assistant.core import llm
+from pillow_assistant.core.semantic_context import resolve_compression_profile
 from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT
 from pillow_assistant.core.i18n import t
 
@@ -43,6 +44,11 @@ class ToolLoopAgent:
         api_base = self.cfg.get("base_url")
         extra = llm.parse_extra(self.cfg.get("extra"))
         tools = self.registry.schemas()
+        semantic_profile = resolve_compression_profile(
+            getattr(self.ctx, "storage", None),
+            getattr(self.ctx, "vault", None),
+            self.cfg,
+        )
 
         user_text = join_context_and_prompt(context, prompt)
         if resume_messages:
@@ -67,14 +73,19 @@ class ToolLoopAgent:
         used_tools = False
         self._artifacts: list[str] = []
         self._step = 0
+        self.last_managed_messages: Optional[list[dict[str, Any]]] = None
         for step in range(1, self.max_steps + 1):
             self._step = step
             turn = await llm.complete_with_tools(
                 provider=provider, model=model, messages=messages, tools=tools,
                 api_key=self.api_key, api_base=api_base, extra=extra,
+                semantic_profile=semantic_profile,
             )
             if getattr(turn, "managed_messages", None) is not None:
-                messages = list(turn.managed_messages)
+                # Keep the raw transcript as the session source of truth.  The
+                # compacted view is only what was sent to the model and must
+                # not overwrite tool results or source text needed later.
+                self.last_managed_messages = list(turn.managed_messages)
             if not turn.tool_calls:
                 final_text = turn.content or ""
                 if final_text:

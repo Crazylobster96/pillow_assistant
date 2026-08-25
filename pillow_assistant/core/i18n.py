@@ -283,7 +283,7 @@ _ZH = {
     "extract.truncated": "\n…（已截断）",
     "extract.slide": "--- 幻灯片 {i} ---",
     # -- tools: self-configuration (models / language) ---------------------------------------------
-    "tool.lm.desc": "列出已配置的模型、当前角色分配（chat=对话主模型，vision=看图，asr=语音转写）和实际生效的 ASR 后端。",
+    "tool.lm.desc": "列出已配置的模型、当前角色分配（chat=对话主模型，vision=看图，compression=语义压缩，asr=语音转写）和实际生效的 ASR 后端。",
     "tool.lm.none": "尚未配置任何模型。",
     "tool.lm.header_models": "已配置模型：",
     "tool.lm.header_roles": "角色分配：",
@@ -300,11 +300,11 @@ _ZH = {
     "tool.cm.no_storage": "当前环境没有配置存储，无法配置模型",
     "tool.cm.saved": "已保存模型配置 {name}（{provider} / {model}，类型 {type}）",
     "tool.ar.desc": "为用途角色指定模型并持久化：chat=日常对话/Agent 主模型，vision=涉及图片时用的多模态模型，"
-                    "asr=语音转写后端（sensevoice 或 whisper，可带 whisper_size）。用户要求「用 X 模型做 Y」时使用。",
-    "tool.ar.role": "角色：chat / vision / asr",
-    "tool.ar.model": "chat/vision 填模型的显示名称；asr 填后端名 sensevoice 或 whisper",
+                    "compression=大上下文语义压缩模型，asr=语音转写后端（sensevoice 或 whisper，可带 whisper_size）。用户要求「用 X 模型做 Y」时使用。",
+    "tool.ar.role": "角色：chat / vision / compression / asr",
+    "tool.ar.model": "chat/vision/compression 填模型的显示名称；asr 填后端名 sensevoice 或 whisper",
     "tool.ar.size": "仅 asr+whisper 时可选：tiny/base/small/medium",
-    "tool.ar.bad_role": "未知角色：{role}（可选 chat / vision / asr）",
+    "tool.ar.bad_role": "未知角色：{role}（可选 chat / vision / compression / asr）",
     "tool.ar.model_not_found": "未找到模型配置：{name}（先用 configure_model 添加，或用 list_models 查看）",
     "tool.ar.bad_backend": "未知 ASR 后端：{name}（可选 sensevoice / whisper）",
     "tool.ar.saved": "已设置 {role} → {value}，后续请求自动生效",
@@ -629,7 +629,7 @@ _EN = {
     "extract.truncated": "\n… (truncated)",
     "extract.slide": "--- Slide {i} ---",
     "tool.lm.desc": "List configured models, current role assignments (chat = main conversation model, "
-                    "vision = image model, asr = speech-to-text) and the effective ASR backend.",
+                    "vision = image model, compression = semantic compressor, asr = speech-to-text) and the effective ASR backend.",
     "tool.lm.none": "No models configured yet.",
     "tool.lm.header_models": "Configured models:",
     "tool.lm.header_roles": "Role assignments:",
@@ -647,12 +647,12 @@ _EN = {
     "tool.cm.no_storage": "No config storage in this environment, cannot configure models",
     "tool.cm.saved": "Saved model config {name} ({provider} / {model}, type {type})",
     "tool.ar.desc": "Assign a model to a purpose role (persisted): chat = main conversation/agent model, "
-                    "vision = multimodal model for images, asr = speech backend (sensevoice or whisper, "
+                    "vision = multimodal model for images, compression = large-context semantic compressor, asr = speech backend (sensevoice or whisper, "
                     "optional whisper_size). Use when the user says \"use model X for Y\".",
-    "tool.ar.role": "role: chat / vision / asr",
-    "tool.ar.model": "for chat/vision: the model's display name; for asr: backend name sensevoice or whisper",
+    "tool.ar.role": "role: chat / vision / compression / asr",
+    "tool.ar.model": "for chat/vision/compression: the model's display name; for asr: backend name sensevoice or whisper",
     "tool.ar.size": "asr+whisper only, optional: tiny/base/small/medium",
-    "tool.ar.bad_role": "Unknown role: {role} (chat / vision / asr)",
+    "tool.ar.bad_role": "Unknown role: {role} (chat / vision / compression / asr)",
     "tool.ar.model_not_found": "Model config not found: {name} (add it with configure_model, or check list_models)",
     "tool.ar.bad_backend": "Unknown ASR backend: {name} (sensevoice / whisper)",
     "tool.ar.saved": "Set {role} → {value}; takes effect on subsequent requests",

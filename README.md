@@ -99,10 +99,34 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 
 #### 让 Agent 配置自己
 
-- 「把 qwen2.5 设为对话模型，看图用 GPT-4o」→ Agent 调 `assign_model_role` 持久化角色（chat/vision/asr），后续请求自动路由；也可在配置窗口选中模型后点「**设为默认对话模型**」；
+- 「把 qwen2.5 设为对话模型，看图用 GPT-4o，SmallModel 用于上下文压缩」→ Agent 调 `assign_model_role` 持久化角色（chat/vision/compression/asr），后续请求自动路由；也可在配置窗口选中模型后点「**设为默认对话模型**」；
 - 「帮我接入本地 Ollama 的 llama3」→ Agent 调 `configure_model` 新增配置；
 - 「把最大步数调到 100」→ `set_max_steps` 持久化步数预算；
 - 「switch to English」/「切回中文」→ 界面与提示语言热切换（也可用环境变量 `PILLOW_LANG=zh|en`）。
+
+#### 大上下文语义压缩
+
+对 64K 以上的模型窗口，Pillow Assistant 默认在输入达到 60% 时后台生成带来源 ID 的结构化语义胶囊，75% 后进入待切换阶段，85% 时用经过模型校验的胶囊替换旧对话与引用资料；当前问题、系统规则和活动工具链保留。压缩失败、超时或供应商仍报超限时，自动回退到确定性裁剪。原始会话/项目历史不被胶囊覆盖。语义压缩会产生额外模型调用及相应的供应商费用。
+
+可在模型配置的 `extra` JSON 中覆盖默认值；`model_ref` 也可由全局 `compression` 模型角色代替：
+
+```json
+{
+  "pillow_context": {
+    "context_window": 128000,
+    "semantic_compression": {
+      "enabled": true,
+      "model_ref": "SmallModel",
+      "background_start_ratio": 0.60,
+      "prepare_ratio": 0.75,
+      "switch_ratio": 0.85,
+      "chunk_tokens": 24000,
+      "verify": true,
+      "switch_wait_seconds": 90
+    }
+  }
+}
+```
 
 #### 其它
 
@@ -217,10 +241,34 @@ Dropped videos play right in the panel. Try: "this video is too big for the mode
 
 #### Let the Agent configure itself
 
-- "Use qwen2.5 for chat and GPT-4o for images" → `assign_model_role` persists purpose roles (chat/vision/asr) and routing follows automatically; or select a model in Settings and click "**Set as default chat model**";
+- "Use qwen2.5 for chat, GPT-4o for images, and SmallModel for context compression" → `assign_model_role` persists purpose roles (chat/vision/compression/asr) and routing follows automatically; or select a model in Settings and click "**Set as default chat model**";
 - "Hook up llama3 from my local Ollama" → `configure_model` adds the config;
 - "Set max steps to 100" → `set_max_steps` persists the step budget;
 - "切回中文" / "switch to English" → hot-swaps the UI/prompt language (or set `PILLOW_LANG=zh|en`).
+
+#### Large-context semantic compression
+
+For model windows of 64K or larger, Pillow Assistant starts a source-attributed structured capsule in the background at 60% input usage, marks it ready to switch after 75%, and switches to the model-verified capsule at 85%. The current request, system rules, and active tool chain remain protected. A timeout, validation failure, or provider context error falls back to deterministic compaction. Raw conversation and project history are never overwritten by the capsule. Semantic compression makes additional model calls and may incur corresponding provider charges.
+
+Override defaults in the model config's `extra` JSON. `model_ref` may be replaced by the global `compression` model role:
+
+```json
+{
+  "pillow_context": {
+    "context_window": 128000,
+    "semantic_compression": {
+      "enabled": true,
+      "model_ref": "SmallModel",
+      "background_start_ratio": 0.60,
+      "prepare_ratio": 0.75,
+      "switch_ratio": 0.85,
+      "chunk_tokens": 24000,
+      "verify": true,
+      "switch_wait_seconds": 90
+    }
+  }
+}
+```
 
 #### More
 

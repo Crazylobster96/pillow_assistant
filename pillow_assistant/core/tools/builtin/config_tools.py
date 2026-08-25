@@ -1,5 +1,5 @@
 """Self-configuration tools: the Agent can manage model configs, assign models
-to purpose roles (chat / vision / asr) and switch the app language — all on the
+to purpose roles (chat / vision / asr / compression) and switch the app language — all on the
 user's request, persisted across restarts."""
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ class ListModelsTool:
         roles = load_roles()
         lines.append("")
         lines.append(t("tool.lm.header_roles"))
-        for role in ("chat", "vision"):
+        for role in ("chat", "vision", "compression"):
             lines.append(f"- {role}: {roles.get(role) or t('tool.lm.unset')}")
         asr_pref = roles.get("asr")
         lines.append(f"- asr: {asr_pref if asr_pref else t('tool.lm.unset')}")
@@ -112,7 +112,7 @@ class AssignModelRoleTool:
     parameters = {
         "type": "object",
         "properties": {
-            "role": {"type": "string", "enum": ["chat", "vision", "asr"],
+            "role": {"type": "string", "enum": ["chat", "vision", "asr", "compression"],
                      "description": t("tool.ar.role")},
             "model": {"type": "string", "description": t("tool.ar.model")},
             "whisper_size": {"type": "string", "description": t("tool.ar.size")},
@@ -123,7 +123,7 @@ class AssignModelRoleTool:
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         role = (args.get("role") or "").strip().lower()
         value = (args.get("model") or "").strip()
-        if role not in ("chat", "vision", "asr"):
+        if role not in ("chat", "vision", "asr", "compression"):
             return ToolResult(ok=False, text=t("tool.ar.bad_role", role=role))
 
         if role == "asr":
