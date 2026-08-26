@@ -38,6 +38,9 @@ class ToolContext:
     storage: Any = None                    # optional Storage for self-configuration tools
     ask: Any = None                        # optional async callable(spec)->dict to ask the user
     project_store: Any = None              # optional ProjectStore for project management tools
+    project_memory: Any = None             # optional ProjectMemoryService for project-bound runs
+    project_id: Optional[str] = None        # active project id, absent for one-off chat
+    memory_request_count: int = 0           # bounded retrievals in the current Agent turn
 
 
 @dataclass

@@ -28,6 +28,7 @@ class ToolLoopAgent:
         self.ctx = ctx
         self.max_steps = max_steps
 
+        self.tool_evidence: list[dict[str, Any]] = []
     async def run(
         self,
         *,
@@ -72,6 +73,7 @@ class ToolLoopAgent:
         reached_limit = True
         used_tools = False
         self._artifacts: list[str] = []
+        self.tool_evidence: list[dict[str, Any]] = []
         self._step = 0
         self.last_managed_messages: Optional[list[dict[str, Any]]] = None
         for step in range(1, self.max_steps + 1):
@@ -149,6 +151,13 @@ class ToolLoopAgent:
         t0 = time.time()
         result = await self.registry.dispatch(tc.name, args, self.ctx)
         summary = result.text
+        self.tool_evidence.append({
+            "tool_call_id": getattr(tc, "id", None),
+            "tool_name": tc.name,
+            "ok": bool(getattr(result, "ok", False)),
+            "text": summary,
+            "artifacts": list(getattr(result, "artifacts", None) or []),
+        })
         await emit(AgentEvent(
             request_id=request_id,
             type=EventType.TOOL_RESULT,

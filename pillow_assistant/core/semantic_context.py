@@ -837,10 +837,22 @@ def _remove_marked_text(text: str) -> tuple[str, str]:
         return "", text
     body_start = start + len(context_budget.CONTEXT_OPEN)
     source = text[body_start:end].strip("\n")
+    state_block = ""
+    state_start = source.find(context_budget.PROJECT_STATE_OPEN)
+    state_end = source.find(context_budget.PROJECT_STATE_CLOSE)
+    if state_start >= 0 and state_end > state_start:
+        state_end += len(context_budget.PROJECT_STATE_CLOSE)
+        state_block = source[state_start:state_end]
+        source = (source[:state_start] + source[state_end:]).strip()
+    replacement_lines = [context_budget.CONTEXT_OPEN]
+    if state_block:
+        replacement_lines.append(state_block)
+    replacement_lines.append(
+        "[Supporting context moved to the semantic context capsule with source provenance.]"
+    )
+    replacement_lines.append(context_budget.CONTEXT_CLOSE)
     replacement = (
-        f"{context_budget.CONTEXT_OPEN}\n"
-        "[Supporting context moved to the semantic context capsule with source provenance.]\n"
-        f"{context_budget.CONTEXT_CLOSE}"
+        "\n".join(replacement_lines)
     )
     return source, text[:start] + replacement + text[end + len(context_budget.CONTEXT_CLOSE) :]
 

@@ -4,6 +4,8 @@ with a pluggable tool registry, and audit-log the run (R1++ / T0–T3).
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -27,6 +29,13 @@ SWITCH_CONFIDENCE = 0.8
 # Switching *away* from a project you're actively working in is riskier (it can
 # orphan the thread), so it needs a higher bar than attaching from one-off chat.
 SWITCH_AWAY_CONFIDENCE = 0.9
+
+
+def _is_resume_request(prompt: str) -> bool:
+    text = " ".join(str(prompt or "").strip().lower().split()).strip("。.!！?？")
+    if text in {"继续", "继续执行", "接着做", "恢复", "恢复任务", "resume", "continue"}:
+        return True
+    return text.startswith(("继续上次", "继续刚才", "resume ", "continue "))
 
 
 class Orchestrator:
@@ -57,6 +66,37 @@ class Orchestrator:
                 self.conversation_memory = ConversationMemoryService(store)
         except Exception:
             self.conversation_memory = None
+        self.project_memory = None
+        self.project_memory_backend_error = None
+        try:
+            from pillow_assistant.core.project_memory import ProjectMemoryService
+            from pillow_assistant.core.rag.level3_backend import build_level3_backend
+            from pillow_assistant.core.rag.project_backend import build_layer2_backend
+            from pillow_assistant.core.settings import load_settings
+            from storage.project_memory import ProjectMemoryStore
+
+            db_path = getattr(storage, "db_path", None)
+            projects_base = getattr(getattr(project_manager, "store", None), "base", None)
+            if db_path is not None and projects_base is not None:
+                project_store = ProjectMemoryStore(db_path, projects_base)
+                project_store.ensure_schema()
+                memory_settings = load_settings().get("project_memory") or {}
+                level2_settings = memory_settings.get("level2") or {}
+                try:
+                    backend = build_layer2_backend(project_store, db_path, level2_settings)
+                except Exception as exc:
+                    # Keep the last known-good mandatory Level-1 backend.
+                    self.project_memory_backend_error = str(exc)
+                    backend = project_store
+                level3_settings = memory_settings.get("level3") or {}
+                try:
+                    backend = build_level3_backend(backend, db_path, level3_settings)
+                except Exception as exc:
+                    # Preserve the already validated lower-level backend.
+                    self.project_memory_backend_error = str(exc)
+                self.project_memory = ProjectMemoryService(backend)
+        except Exception:
+            self.project_memory = None
         self._register_skills()
 
     # -- chat history persistence (one-off conversations, not project-bound) --
@@ -112,7 +152,7 @@ class Orchestrator:
         except Exception:
             pass
 
-    def _agent(self, cfg, api_key, workspace, emit, refs, audit, request_id=""):
+    def _agent(self, cfg, api_key, workspace, emit, refs, audit, request_id="", project_id=None):
         ask = None
         if self.ask_broker is not None:
             async def ask(spec, _b=self.ask_broker, _e=emit, _rid=request_id):
@@ -120,7 +160,9 @@ class Orchestrator:
         ctx = ToolContext(workspace=Path(workspace), session=self.pm.session, emit=emit,
                           vault=self.vault, references=list(refs or []), audit=audit,
                           undo_manager=self.undo_manager, request_id=request_id,
-                          storage=self.storage, ask=ask, project_store=self.pm.store)
+                          storage=self.storage, ask=ask, project_store=self.pm.store,
+                          project_memory=self.project_memory, project_id=project_id,
+                          memory_request_count=0)
         # User-adjustable step budget (set_max_steps tool); read per request.
         try:
             from pillow_assistant.core.settings import load_settings
@@ -156,12 +198,18 @@ class Orchestrator:
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session else None
         tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id)
 
-        # A paused (step-limited) run takes precedence over triage for short
-        # follow-ups like「继续」: route back to the project holding the state.
-        if tr.is_chat and tr.rationale != "app-setting" and current_id is not None:
+        # A paused run only resumes on an explicit continuation request. Check
+        # both the in-memory fast path and the persistent Level-1 transcript.
+        persistent_resume = None
+        if _is_resume_request(request.prompt) and current_id is not None:
             sid = getattr(self.pm.session, "session_id", None)
-            if (current_id, sid) in self._resume_state:
-
+            if self.project_memory is not None and sid:
+                try:
+                    persistent_resume = self.project_memory.load_resume(current_id, sid)
+                except Exception:
+                    persistent_resume = None
+            has_resume = (current_id, sid) in self._resume_state or persistent_resume is not None
+            if tr.is_chat and tr.rationale != "app-setting" and has_resume:
                 tr = TriageResult(action="continue", project_id=current_id,
                                   confidence=1.0, rationale="resume-pending")
 
@@ -207,22 +255,76 @@ class Orchestrator:
         # not just the current session. A switch / new session must never make
         # the Agent lose the project's accumulated context.
         history = self.pm.store.load_history(project)
+        memory_ctx = None
+        final_context = context_text
+        if self.project_memory is not None:
+            try:
+                memory_ctx = self.project_memory.prepare_context(
+                    project.id, request.prompt, references=request.references
+                )
+                if memory_ctx.rendered_context:
+                    final_context = (
+                        (context_text + "\n\n") if context_text else ""
+                    ) + memory_ctx.rendered_context
+            except Exception:
+                memory_ctx = None
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
-                            request_id=request.id)
+                            request_id=request.id, project_id=project.id)
         resume_key = (project.id, session_id)
+        resume_messages = None
+        if _is_resume_request(request.prompt):
+            resume_messages = self._resume_state.pop(resume_key, None)
+            if resume_messages is None and persistent_resume is not None:
+                resume_messages = persistent_resume.get("messages")
         final_text = await agent.run(
             prompt=request.prompt, emit=emit, request_id=request.id,
-            context=context_text, image_paths=image_paths or None, history=history,
-            resume_messages=self._resume_state.pop(resume_key, None),
+            context=final_context, image_paths=image_paths or None, history=history,
+            resume_messages=resume_messages,
         )
         hit_limit = bool(getattr(agent, "reached_limit", False))
         if hit_limit:
             self._resume_state[resume_key] = agent.final_messages
+            if self.project_memory is not None and session_id:
+                try:
+                    fingerprint = hashlib.sha256(request.prompt.encode("utf-8")).hexdigest()
+                    self.project_memory.save_resume(
+                        project.id, session_id, agent.final_messages, fingerprint
+                    )
+                except Exception:
+                    pass
+        elif resume_messages is not None and self.project_memory is not None and session_id:
+            try:
+                self.project_memory.clear_resume(project.id, session_id)
+            except Exception:
+                pass
         # Persist whether this project has work left to resume, so the project
         # browser can show which projects are still in progress.
-        self.pm.store.set_unfinished(project, hit_limit)
-        audit.run_end(len(final_text))
+        still_pending = resume_key in self._resume_state
+        if self.project_memory is not None and session_id and not still_pending and not hit_limit:
+            try:
+                still_pending = self.project_memory.load_resume(project.id, session_id) is not None
+            except Exception:
+                still_pending = False
+        self.pm.store.set_unfinished(project, hit_limit or still_pending)
         self.pm.store.record_turn(project, session_id, request.prompt, final_text)
+        if self.project_memory is not None and memory_ctx is not None:
+            try:
+                await self.project_memory.record_turn(
+                    project.id, session_id, request.id, request.prompt, final_text,
+                    cfg=cfg, api_key=api_key, transcript=agent.final_messages,
+                    tool_evidence=getattr(agent, "tool_evidence", []),
+                )
+            except Exception as exc:
+                audit._write({"kind": "project_memory_writeback_failed", "error": str(exc)[:300]})
+        if self.project_memory is not None:
+            processor = getattr(self.project_memory.store, "process_pending_jobs", None)
+            if callable(processor):
+                try:
+                    # Agent DONE has already been emitted; indexing cannot delay the answer stream.
+                    await asyncio.to_thread(processor, project.id, 4)
+                except Exception as exc:
+                    audit._write({"kind": "project_rag_index_failed", "error": str(exc)[:300]})
+        audit.run_end(len(final_text))
 
     async def _run_chat(self, request, emit, cfg, api_key, context_text, image_paths) -> None:
         await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=t("core.chat_note") + "\n"))

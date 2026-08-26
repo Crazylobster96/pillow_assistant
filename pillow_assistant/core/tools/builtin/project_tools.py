@@ -37,8 +37,22 @@ class DeleteProjectTool:
             project = matches[0]
 
         pid, pname = project.id, project.name
+        memory_store = getattr(getattr(ctx, "project_memory", None), "store", None)
+        if memory_store is not None:
+            try:
+                memory_store.flush_events(pid)
+            except Exception as exc:
+                return ToolResult(ok=False, text=f"Project memory could not be prepared for deletion: {exc}")
         if not store.delete(pid):
             return ToolResult(ok=False, text=t("tool.delproj.failed", name=pname))
+        if memory_store is not None:
+            try:
+                memory_store.delete_project_memory(pid)
+            except Exception as exc:
+                return ToolResult(
+                    ok=False,
+                    text=f"Project files were deleted, but structured memory cleanup failed: {exc}",
+                )
 
         # If the deleted project is the current conversation's, unbind it so the
         # next turn falls back to one-off chat (no dangling project_id).

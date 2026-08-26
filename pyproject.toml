@@ -68,6 +68,7 @@ packages = [
     "pillow_assistant",
     "pillow_assistant.core",
     "pillow_assistant.core.agent",
+    "pillow_assistant.core.rag",
     "pillow_assistant.core.tools",
     "pillow_assistant.core.tools.builtin",
     "pillow_assistant.ui",

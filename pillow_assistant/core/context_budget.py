@@ -38,6 +38,10 @@ CONTEXT_OPEN = "<pillow_supporting_context>"
 CONTEXT_CLOSE = "</pillow_supporting_context>"
 REQUEST_OPEN = "<pillow_current_request>"
 REQUEST_CLOSE = "</pillow_current_request>"
+PROJECT_STATE_OPEN = "<pillow_project_state>"
+PROJECT_STATE_CLOSE = "</pillow_project_state>"
+PROJECT_EVIDENCE_OPEN = "<pillow_project_memory_evidence>"
+PROJECT_EVIDENCE_CLOSE = "</pillow_project_memory_evidence>"
 
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _ENGLISH_WORD_RE = re.compile(r"[A-Za-z]+(?:['’-][A-Za-z]+)*")
@@ -539,8 +543,20 @@ def _compact_marked_context(text: str, keep_ratio: float) -> str:
         return text
     body_start = start + len(CONTEXT_OPEN)
     context = text[body_start:end].strip("\n")
+    state_start = context.find(PROJECT_STATE_OPEN)
+    state_end = context.find(PROJECT_STATE_CLOSE)
     limit = max(240, int(len(context) * keep_ratio))
-    compacted = _shorten_text(context, limit)
+    if state_start >= 0 and state_end > state_start:
+        state_end += len(PROJECT_STATE_CLOSE)
+        state_block = context[state_start:state_end]
+        supporting = (context[:state_start] + context[state_end:]).strip()
+        supporting_limit = max(80, limit - len(state_block) - 2)
+        compacted_supporting = _shorten_text(supporting, supporting_limit)
+        compacted = state_block
+        if compacted_supporting:
+            compacted += "\n\n" + compacted_supporting
+    else:
+        compacted = _shorten_text(context, limit)
     return text[:body_start] + "\n" + compacted + "\n" + text[end:]
 
 
@@ -565,6 +581,17 @@ def _largest_text_candidate(
 def _shorten_text(text: str, limit: int) -> str:
     if len(text) <= limit or limit < 80:
         return text
+    state_start = text.find(PROJECT_STATE_OPEN)
+    state_end = text.find(PROJECT_STATE_CLOSE)
+    if state_start >= 0 and state_end > state_start:
+        state_end += len(PROJECT_STATE_CLOSE)
+        state_block = text[state_start:state_end]
+        remainder = (text[:state_start] + text[state_end:]).strip()
+        if not remainder:
+            return state_block
+        remainder_limit = max(80, limit - len(state_block) - 2)
+        compacted_remainder = _shorten_text(remainder, remainder_limit)
+        return state_block + ("\n\n" + compacted_remainder if compacted_remainder else "")
     marker = f"\n… [Pillow compacted {len(text) - limit} characters] …\n"
     available = max(20, limit - len(marker))
     head = max(10, int(available * 0.68))
