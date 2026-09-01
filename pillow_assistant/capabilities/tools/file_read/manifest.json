@@ -1,0 +1,39 @@
+{
+  "name": "file_read",
+  "version": "1.0.0",
+  "description": {
+    "zh": "读取文本文件内容。可读：当前项目工作目录内的文件，或本次会话已引用的文件/目录内文件。",
+    "en": "Read a text file: files inside the project workspace, or files under this session's references."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "文件路径（工作目录内可用相对路径）"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "file path (relative allowed inside the workspace)"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

@@ -23,6 +23,8 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+
+from pillow_assistant.capabilities.prompt_registry import get_prompt_registry
 BACKEND = os.environ.get("PILLOW_ASR_BACKEND", "").strip().lower() or None
 DEFAULT_MODEL = os.environ.get("PILLOW_ASR_MODEL", "small")
 DEFAULT_LANG = os.environ.get("PILLOW_ASR_LANG") or None  # None = auto-detect
@@ -151,7 +153,7 @@ def _whisper_transcribe(wav_path: str, language: Optional[str]) -> str:
         vad_parameters={"min_silence_duration_ms": 300},
         # Mandarin punctuation hint — only when the app language is Chinese,
         # otherwise it would bias non-Chinese speech toward zh.
-        initial_prompt=("以下是普通话的句子，使用规范标点。" if _lang_is_zh() else None),
+        initial_prompt=(get_prompt_registry().render("asr.whisper_initial", language="zh") if _lang_is_zh() else None),
         condition_on_previous_text=False,
     )
     return "".join(seg.text for seg in segments).strip()

@@ -1,0 +1,69 @@
+{
+  "name": "assign_model_role",
+  "version": "1.0.0",
+  "description": {
+    "zh": "为用途角色指定模型并持久化：chat=日常对话/Agent 主模型，vision=涉及图片时用的多模态模型，compression=大上下文语义压缩模型，asr=语音转写后端（sensevoice 或 whisper，可带 whisper_size）。用户要求「用 X 模型做 Y」时使用。",
+    "en": "Assign a model to a purpose role (persisted): chat = main conversation/agent model, vision = multimodal model for images, compression = large-context semantic compressor, asr = speech backend (sensevoice or whisper, optional whisper_size). Use when the user says \"use model X for Y\"."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "vision",
+            "asr",
+            "compression"
+          ],
+          "description": "角色：chat / vision / compression / asr"
+        },
+        "model": {
+          "type": "string",
+          "description": "chat/vision/compression 填模型的显示名称；asr 填后端名 sensevoice 或 whisper"
+        },
+        "whisper_size": {
+          "type": "string",
+          "description": "仅 asr+whisper 时可选：tiny/base/small/medium"
+        }
+      },
+      "required": [
+        "role",
+        "model"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "vision",
+            "asr",
+            "compression"
+          ],
+          "description": "role: chat / vision / compression / asr"
+        },
+        "model": {
+          "type": "string",
+          "description": "for chat/vision/compression: the model's display name; for asr: backend name sensevoice or whisper"
+        },
+        "whisper_size": {
+          "type": "string",
+          "description": "asr+whisper only, optional: tiny/base/small/medium"
+        }
+      },
+      "required": [
+        "role",
+        "model"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

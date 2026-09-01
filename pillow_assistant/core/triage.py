@@ -18,6 +18,7 @@ from typing import Optional
 
 from pillow_assistant.core import llm
 from pillow_assistant.core.context_budget import join_context_and_prompt
+from pillow_assistant.capabilities.prompt_registry import render_prompt
 
 CONFIDENCE_THRESHOLD = 0.6
 
@@ -92,37 +93,8 @@ def parse_triage(text: str, valid_ids: set[str]) -> TriageResult:
     return TriageResult(action="chat", confidence=conf, rationale=rationale)
 
 
-_SYSTEM_ZH = (
-    "你是任务分诊器。判断用户这次请求属于哪一类，只输出一个 JSON 对象，不要多余文字：\n"
-    '{"action":"chat"|"continue"|"new","project_id":<continue时填项目id否则null>,'
-    '"name":<new时给不超过12字的中文项目名否则null>,"confidence":0~1,"rationale":"简短理由"}\n'
-    "判定规则：\n"
-    "- chat：与已有项目无关的简单一问一答、闲聊、概念解释、单步小任务，无需建立项目。\n"
-    "- continue：若本次请求明显是在延续/追问/修改某个已有项目的工作（即使措辞很短，"
-    "如「继续」「把刚才的表再加一列」「上次那个方案改一下」），就 action=continue 并填该项目 id；"
-    "宁可归到最相关的项目，也不要轻易当 chat 丢掉上下文。\n"
-    "- new：复杂工作（多步骤、要产出文件、需持续推进）且与任何已有项目都不同源时，action=new。"
-)
-
-_SYSTEM_EN = (
-    "You are a task triager. Classify the user's request and output ONE JSON object, nothing else:\n"
-    '{"action":"chat"|"continue"|"new","project_id":<project id when continue, else null>,'
-    '"name":<a short English project name (<=4 words) when new, else null>,'
-    '"confidence":0~1,"rationale":"brief reason"}\n'
-    "Rules:\n"
-    "- chat: simple Q&A / small talk / concept explanation / single-step micro tasks UNRELATED to any "
-    "existing project.\n"
-    "- continue: if the request clearly continues / follows up on / edits an existing project's work "
-    "(even if phrased briefly, e.g. \"continue\", \"add a column to that table\", \"tweak last plan\"), "
-    "set action=continue with that project id; prefer attaching to the most relevant project over "
-    "dropping context as chat.\n"
-    "- new: complex work (multi-step, produces files, ongoing) that matches no existing project → action=new."
-)
-
-
 def _system_prompt() -> str:
-    from pillow_assistant.core.i18n import LANG
-    return _SYSTEM_ZH if LANG == "zh" else _SYSTEM_EN
+    return render_prompt("routing.project_triage.system")
 
 
 async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional[str],
@@ -141,10 +113,7 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
         {"role": "system", "content": _system_prompt()},
         {"role": "user", "content": join_context_and_prompt(
             f"已有项目：\n{listing}{hint}",
-            (
-                f"新请求：{prompt}\n\n"
-                "请根据支持材料完成项目分诊，并严格按系统消息要求只返回 JSON。"
-            ),
+            render_prompt("routing.project_triage.request", prompt=prompt),
         )},
     ]
     try:

@@ -1,0 +1,47 @@
+{
+  "name": "browser_read",
+  "version": "1.0.0",
+  "description": {
+    "zh": "用无头浏览器打开一个网页并返回其可见文本（会执行 JS，适合普通 http_request 抓不到内容的动态页面）。仅公网地址；可选 CSS 选择器只取某区域。",
+    "en": "Open a web page in a headless browser and return its visible text (executes JS — for dynamic pages plain http_request can't read). Public addresses only; optional CSS selector to scope the extraction."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "完整 http/https URL"
+        },
+        "selector": {
+          "type": "string",
+          "description": "可选 CSS 选择器，默认 body"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "full http/https URL"
+        },
+        "selector": {
+          "type": "string",
+          "description": "optional CSS selector, defaults to body"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  "permission": "network",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

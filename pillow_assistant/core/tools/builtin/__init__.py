@@ -1,7 +1,8 @@
-"""Built-in tools and the default registry (T0)."""
+"""Built-in tools and the default manifest-backed registry."""
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import ToolManifestRegistry
 from pillow_assistant.core.tools.registry import ToolRegistry
 
 
@@ -26,22 +27,27 @@ def build_default_registry() -> ToolRegistry:
     from pillow_assistant.core.tools.builtin.video_tool import ProcessVideoTool
 
     reg = ToolRegistry()
-    reg.register(PythonTool())
-    reg.register(FileReadTool())
-    reg.register(FileWriteTool())
-    reg.register(FileListTool())
-    reg.register(HttpRequestTool())
-    reg.register(RunCliTool())
-    reg.register(BrowserReadTool())
-    reg.register(PresentTool())
-    reg.register(ListModelsTool())
-    reg.register(ConfigureModelTool())
-    reg.register(AssignModelRoleTool())
-    reg.register(SetLanguageTool())
-    reg.register(SetMaxStepsTool())
-    reg.register(SetSurfaceTransparencyTool())
-    reg.register(AskUserTool())
-    reg.register(ProcessVideoTool())
-    reg.register(RequestProjectMemoryTool())
-    reg.register(DeleteProjectTool())
+    manifests = ToolManifestRegistry()
+
+    def register(tool) -> None:
+        reg.register(manifests.bind(tool))
+
+    register(PythonTool())
+    register(FileReadTool())
+    register(FileWriteTool())
+    register(FileListTool())
+    register(HttpRequestTool())
+    register(RunCliTool())
+    register(BrowserReadTool())
+    register(PresentTool())
+    register(ListModelsTool())
+    register(ConfigureModelTool())
+    register(AssignModelRoleTool())
+    register(SetLanguageTool())
+    register(SetMaxStepsTool())
+    register(SetSurfaceTransparencyTool())
+    register(AskUserTool())
+    register(ProcessVideoTool())
+    register(RequestProjectMemoryTool())
+    register(DeleteProjectTool())
     return reg

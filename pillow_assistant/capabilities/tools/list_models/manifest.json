@@ -1,0 +1,23 @@
+{
+  "name": "list_models",
+  "version": "1.0.0",
+  "description": {
+    "zh": "列出已配置的模型、当前角色分配（chat=对话主模型，vision=看图，compression=语义压缩，asr=语音转写）和实际生效的 ASR 后端。",
+    "en": "List configured models, current role assignments (chat = main conversation model, vision = image model, compression = semantic compressor, asr = speech-to-text) and the effective ASR backend."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {}
+    },
+    "en": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

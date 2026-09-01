@@ -3,6 +3,8 @@ the session's referenced paths."""
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 from pathlib import Path
 
 from pillow_assistant.core.i18n import t
@@ -34,15 +36,10 @@ def _is_reference(ctx: ToolContext, target: Path) -> bool:
     return False
 
 
+@manifest_tool
 class FileReadTool:
     name = "file_read"
     permission = Permission.READONLY
-    description = t("tool.fr.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"path": {"type": "string", "description": t("tool.fr.path")}},
-        "required": ["path"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         raw = args.get("path", "")
@@ -61,18 +58,10 @@ class FileReadTool:
         return ToolResult(ok=True, text=text)
 
 
+@manifest_tool
 class FileWriteTool:
     name = "file_write"
     permission = Permission.WRITE_WS
-    description = t("tool.fw.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "path": {"type": "string", "description": t("tool.fw.path")},
-            "content": {"type": "string", "description": t("tool.fw.content")},
-        },
-        "required": ["path", "content"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         raw = args.get("path", "")
@@ -110,14 +99,10 @@ class FileWriteTool:
                           artifacts=[str(rel)], undo_token=undo_token, undo_label=undo_label)
 
 
+@manifest_tool
 class FileListTool:
     name = "file_list"
     permission = Permission.READONLY
-    description = t("tool.fl.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"path": {"type": "string", "description": t("tool.fl.path")}},
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         raw = args.get("path", ".") or "."

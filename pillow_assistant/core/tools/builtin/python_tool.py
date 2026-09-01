@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 import asyncio
 
 from pillow_assistant.core.i18n import t
@@ -9,15 +11,10 @@ from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 from pillow_assistant.core.tools.sandbox import Sandbox
 
 
+@manifest_tool
 class PythonTool:
     name = "run_python"
     permission = Permission.WRITE_WS
-    description = t("tool.py.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"code": {"type": "string", "description": t("tool.py.code")}},
-        "required": ["code"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         code = args.get("code", "")

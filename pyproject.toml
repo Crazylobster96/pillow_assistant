@@ -67,6 +67,7 @@ pillow-assistant = "pillow_assistant.app:main"
 packages = [
     "pillow_assistant",
     "pillow_assistant.core",
+    "pillow_assistant.capabilities",
     "pillow_assistant.core.agent",
     "pillow_assistant.core.rag",
     "pillow_assistant.core.tools",
@@ -75,4 +76,13 @@ packages = [
     "pillow_assistant.ui.panels",
     "pillow_assistant.tools",
     "storage",
+]
+
+[tool.setuptools.package-data]
+"pillow_assistant.capabilities" = [
+    "prompts/catalog.json",
+    "prompts/*/*.md",
+    "tools/*/manifest.json",
+    "skills/builtin/*.txt",
+    "skills/builtin/*/SKILL.md",
 ]

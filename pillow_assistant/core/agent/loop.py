@@ -14,7 +14,7 @@ from pillow_assistant.contracts import AgentEvent, EventType, SurfaceLevel, Surf
 from pillow_assistant.core.context_budget import join_context_and_prompt
 from pillow_assistant.core import llm
 from pillow_assistant.core.semantic_context import resolve_compression_profile
-from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT
+from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_METADATA
 from pillow_assistant.core.i18n import t
 
 Emit = Callable[[AgentEvent], Awaitable[None]]
@@ -44,7 +44,19 @@ class ToolLoopAgent:
         model = self.cfg.get("model") or ""
         api_base = self.cfg.get("base_url")
         extra = llm.parse_extra(self.cfg.get("extra"))
-        tools = self.registry.schemas()
+        mode = "project" if getattr(self.ctx, "project_id", None) else "chat"
+        try:
+            tools = self.registry.schemas(mode=mode)
+        except TypeError:  # compatibility with minimal test/plugin registries
+            tools = self.registry.schemas()
+        self.capability_snapshot = {
+            "prompts": [dict(SYSTEM_PROMPT_METADATA)],
+            "tools": (self.registry.snapshot(mode) if hasattr(self.registry, "snapshot") else []),
+            "skills": list(getattr(self.ctx, "skill_snapshot", None) or []),
+        }
+        audit = getattr(self.ctx, "audit", None)
+        if audit is not None and hasattr(audit, "_write"):
+            audit._write({"kind": "capability_snapshot", **self.capability_snapshot})
         semantic_profile = resolve_compression_profile(
             getattr(self.ctx, "storage", None),
             getattr(self.ctx, "vault", None),

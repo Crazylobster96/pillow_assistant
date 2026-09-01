@@ -1,0 +1,49 @@
+{
+  "name": "file_write",
+  "version": "1.0.0",
+  "description": {
+    "zh": "把文本写入当前项目工作目录内的文件（仅限工作目录，不能写到目录之外）。",
+    "en": "Write text to a file inside the current project workspace (workspace only, nothing outside)."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "工作目录内的相对路径，如 report.md"
+        },
+        "content": {
+          "type": "string",
+          "description": "要写入的文本内容"
+        }
+      },
+      "required": [
+        "path",
+        "content"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "relative path inside the workspace, e.g. report.md"
+        },
+        "content": {
+          "type": "string",
+          "description": "text content to write"
+        }
+      },
+      "required": [
+        "path",
+        "content"
+      ]
+    }
+  },
+  "permission": "write_ws",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

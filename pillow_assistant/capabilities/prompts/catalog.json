@@ -1,0 +1,27 @@
+{
+  "prompts": [
+    {"id":"shared.main_agent","version":"1.0.0","role":"system","files":{"zh":"shared/main-agent.zh.md","en":"shared/main-agent.en.md"}},
+    {"id":"routing.project_triage.system","version":"1.0.0","role":"system","files":{"zh":"routing/project-triage.zh.md","en":"routing/project-triage.en.md"}},
+    {"id":"routing.project_triage.request","version":"1.0.0","role":"user","files":{"zh":"routing/project-triage-request.zh.md","en":"routing/project-triage-request.en.md"},"variables":["prompt"]},
+    {"id":"conversation.topic_router.system","version":"1.0.0","role":"system","files":{"default":"conversation/topic-router-system.md"}},
+    {"id":"conversation.topic_router.request","version":"1.0.0","role":"user","files":{"default":"conversation/topic-router-request.md"},"variables":["prompt"]},
+    {"id":"conversation.turn_summary.system","version":"1.0.0","role":"system","files":{"default":"conversation/turn-summary-system.md"}},
+    {"id":"conversation.turn_summary.request","version":"1.0.0","role":"user","files":{"default":"conversation/turn-summary-request.md"}},
+    {"id":"conversation.memory_signals.system","version":"1.0.0","role":"system","files":{"default":"conversation/memory-signals-system.md"}},
+    {"id":"conversation.memory_signals.request","version":"1.0.0","role":"user","files":{"default":"conversation/memory-signals-request.md"}},
+    {"id":"project.state_extractor.system","version":"1.0.0","role":"system","files":{"default":"project/state-extractor-system.md"}},
+    {"id":"project.state_extractor.request","version":"1.0.0","role":"user","files":{"default":"project/state-extractor-request.md"}},
+    {"id":"project.state_block.label","version":"1.0.0","role":"context","files":{"default":"project/state-block-label.md"}},
+    {"id":"project.evidence.warning","version":"1.0.0","role":"context","files":{"default":"project/evidence-warning.md"}},
+    {"id":"project.retrieval.warning","version":"1.0.0","role":"tool","files":{"default":"project/retrieval-warning.md"}},
+    {"id":"context.compressor.system","version":"1.0.0","role":"system","files":{"default":"context/compressor-system.md"}},
+    {"id":"context.compressor.request","version":"1.0.0","role":"user","files":{"default":"context/compressor-request.md"},"variables":["active_request","source_material"]},
+    {"id":"context.verifier.system","version":"1.0.0","role":"system","files":{"default":"context/verifier-system.md"}},
+    {"id":"context.verifier.request","version":"1.0.0","role":"user","files":{"default":"context/verifier-request.md"},"variables":["source_material","capsule"]},
+    {"id":"context.reducer.system","version":"1.0.0","role":"system","files":{"default":"context/reducer-system.md"}},
+    {"id":"context.capsule.system","version":"1.0.0","role":"system","files":{"default":"context/capsule-system.md"},"variables":["status","payload"]},
+    {"id":"context.supporting_moved","version":"1.0.0","role":"context","files":{"default":"context/supporting-moved.md"}},
+    {"id":"asr.whisper_initial","version":"1.0.0","role":"asr","files":{"zh":"asr/whisper-initial.zh.md"}},
+    {"id":"skill.apply.description","version":"1.0.0","role":"tool","files":{"zh":"skill/apply-description.zh.md","en":"skill/apply-description.en.md"},"variables":["listing"]}
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "set_max_steps",
+  "version": "1.0.0",
+  "description": {
+    "zh": "设置 Agent 工具循环的最大步数并持久化（1-500，当前默认 50）。用户要求调整最大步数/觉得任务总被中断时使用；下个请求即生效。",
+    "en": "Set and persist the Agent's tool-loop step budget (1-500, default 50). Use when the user asks to change the max steps or tasks keep getting cut off; applies from the next request."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "integer",
+          "description": "新的最大步数（1-500）"
+        }
+      },
+      "required": [
+        "steps"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "integer",
+          "description": "new max steps (1-500)"
+        }
+      },
+      "required": [
+        "steps"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

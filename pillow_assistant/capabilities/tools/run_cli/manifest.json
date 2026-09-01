@@ -1,0 +1,39 @@
+{
+  "name": "run_cli",
+  "version": "1.0.0",
+  "description": {
+    "zh": "经用户确认后，在当前项目工作目录执行一个本机程序。不启用命令行 shell，不支持管道、重定向或命令串联；会拦截危险命令并限制为 30s。",
+    "en": "After user confirmation, run one local executable in the current project workspace. No command shell, pipes, redirects, or command chaining; dangerous commands are blocked and execution is limited to 30 seconds."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "要执行的单条命令行"
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "the single command line to run"
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

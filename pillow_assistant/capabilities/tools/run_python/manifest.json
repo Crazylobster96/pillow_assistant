@@ -1,0 +1,39 @@
+{
+  "name": "run_python",
+  "version": "1.0.0",
+  "description": {
+    "zh": "在受限沙箱中执行 Python 代码。工作目录是当前项目目录，可读写其中文件；默认禁网。用于数据处理、用 matplotlib 画图、读写/转换文件、生成产物等。返回 returncode 与 stdout/stderr 以及新增的产物文件名。",
+    "en": "Run Python code in a restricted sandbox. The working directory is the current project folder (read/write allowed there); network is blocked by default. Use it for data processing, matplotlib charts, file conversion, generating artifacts. Returns returncode, stdout/stderr and any new artifact filenames."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "要执行的完整、可独立运行的 Python 源代码"
+        }
+      },
+      "required": [
+        "code"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "complete, self-contained Python source to run"
+        }
+      },
+      "required": [
+        "code"
+      ]
+    }
+  },
+  "permission": "write_ws",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

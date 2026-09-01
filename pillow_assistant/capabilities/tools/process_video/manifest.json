@@ -1,0 +1,93 @@
+{
+  "name": "process_video",
+  "version": "1.0.0",
+  "description": {
+    "zh": "用 ffmpeg 处理视频，让它符合后台模型对时长/大小的要求：probe=探测时长/分辨率/大小；split=按时长切成片段（给 segment_seconds，或给 max_mb 自动算每段时长；流复制按关键帧对齐，段长为近似值）；compress=压缩到目标大小（max_mb 必填，可限 max_height，需精确控制大小时用这个）；frames=均匀抽帧成图片（视觉模型只收图片时用）。产物落在项目工作目录。",
+    "en": "Process a video with ffmpeg so it satisfies the backend model's duration/size limits: probe = duration/resolution/size; split = cut into time segments (give segment_seconds, or max_mb to auto-derive; stream-copy aligns to keyframes so lengths are approximate); compress = shrink to a target size (max_mb required, optional max_height — use this when the size must be exact); frames = extract evenly spaced frames as images (for vision models that only take images). Outputs land in the project workspace."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "视频文件路径（工作目录内或已引用的文件）"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "probe",
+            "split",
+            "compress",
+            "frames"
+          ],
+          "description": "probe / split / compress / frames"
+        },
+        "segment_seconds": {
+          "type": "integer",
+          "description": "split：每段时长（秒），不填且给了 max_mb 时自动计算"
+        },
+        "max_mb": {
+          "type": "number",
+          "description": "目标大小上限（MB）：compress 必填；split 时用于自动算每段时长"
+        },
+        "max_height": {
+          "type": "integer",
+          "description": "compress：最大输出高度（默认 720）"
+        },
+        "frame_count": {
+          "type": "integer",
+          "description": "frames：抽取帧数（默认 8）"
+        }
+      },
+      "required": [
+        "path",
+        "action"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "video file path (inside the workspace or a referenced file)"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "probe",
+            "split",
+            "compress",
+            "frames"
+          ],
+          "description": "probe / split / compress / frames"
+        },
+        "segment_seconds": {
+          "type": "integer",
+          "description": "split: seconds per segment; auto-derived when omitted and max_mb is given"
+        },
+        "max_mb": {
+          "type": "number",
+          "description": "target size cap in MB: required for compress; for split it derives the segment length"
+        },
+        "max_height": {
+          "type": "integer",
+          "description": "compress: max output height (default 720)"
+        },
+        "frame_count": {
+          "type": "integer",
+          "description": "frames: number of frames to extract (default 8)"
+        }
+      },
+      "required": [
+        "path",
+        "action"
+      ]
+    }
+  },
+  "permission": "write_ws",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

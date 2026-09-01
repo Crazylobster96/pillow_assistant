@@ -1,0 +1,69 @@
+{
+  "name": "http_request",
+  "version": "1.0.0",
+  "description": {
+    "zh": "发起 HTTP(S) 请求（GET / POST）。仅允许公网地址（自动拦截内网/本机，防 SSRF）；有超时，返回状态码与截断后的响应正文。用于查公开资料、调用公开 API。",
+    "en": "Make an HTTP(S) request (GET / POST). Public addresses only (private/loopback blocked against SSRF); has a timeout, returns status code and truncated body. For public data and public APIs."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "完整 URL，http 或 https"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST"
+          ]
+        },
+        "headers": {
+          "type": "object",
+          "description": "请求头（可选）"
+        },
+        "body": {
+          "type": "string",
+          "description": "POST 请求体（可选）"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "full URL, http or https"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST"
+          ]
+        },
+        "headers": {
+          "type": "object",
+          "description": "request headers (optional)"
+        },
+        "body": {
+          "type": "string",
+          "description": "POST body (optional)"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  "permission": "network",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

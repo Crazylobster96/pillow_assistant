@@ -1,0 +1,39 @@
+{
+  "name": "apply_skill",
+  "version": "1.0.0",
+  "description": {
+    "zh": "应用当前请求加载的一个 Skill；可用 Skill 列表由运行时注入。",
+    "en": "Apply one Skill loaded for the current request; the available Skill list is injected at runtime."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "要应用的 Skill 名称"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the Skill to apply"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

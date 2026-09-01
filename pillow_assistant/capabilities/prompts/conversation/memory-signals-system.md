@@ -1,0 +1,1 @@
+Extract reusable user memory signals as JSON only. Return [] if none. Types: preference, frequent_need, frequent_tool, schedule_candidate. Schedule/reminder candidates must needs_confirmation=true and status=candidate.

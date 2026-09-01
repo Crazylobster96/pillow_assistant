@@ -9,6 +9,8 @@ preview panel).
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 from pathlib import Path
 
 from pillow_assistant.contracts import AgentEvent, EventType, SurfaceLevel, SurfaceSpec
@@ -18,32 +20,9 @@ from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 MAX_WINDOWS = 4
 
 
+@manifest_tool
 class PresentTool:
     name = "present_windows"
-    description = t("tool.pw.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "items": {
-                "type": "array",
-                "description": t("tool.pw.items"),
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string", "description": t("tool.pw.title")},
-                        "text": {"type": "string", "description": t("tool.pw.text")},
-                        "path": {"type": "string", "description": t("tool.pw.path")},
-                    },
-                },
-            },
-            "layout": {
-                "type": "string",
-                "enum": ["row", "column"],
-                "description": t("tool.pw.layout"),
-            },
-        },
-        "required": ["items"],
-    }
     permission = Permission.READONLY
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:

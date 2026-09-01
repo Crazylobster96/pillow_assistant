@@ -3,19 +3,16 @@ explicit request (by name or id)."""
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 from pillow_assistant.core.i18n import t
 from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 
 
+@manifest_tool
 class DeleteProjectTool:
     name = "delete_project"
     permission = Permission.SYSTEM
-    description = t("tool.delproj.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"name": {"type": "string", "description": t("tool.delproj.name")}},
-        "required": ["name"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         store = getattr(ctx, "project_store", None)

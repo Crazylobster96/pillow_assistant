@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 import asyncio
 import ipaddress
 import socket
@@ -34,20 +36,10 @@ def _host_is_private(host: str) -> bool:
     return False
 
 
+@manifest_tool
 class HttpRequestTool:
     name = "http_request"
     permission = Permission.NETWORK
-    description = t("tool.http.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "url": {"type": "string", "description": t("tool.http.url")},
-            "method": {"type": "string", "enum": ["GET", "POST"]},
-            "headers": {"type": "object", "description": t("tool.http.headers")},
-            "body": {"type": "string", "description": t("tool.http.body")},
-        },
-        "required": ["url"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         url = (args.get("url") or "").strip()

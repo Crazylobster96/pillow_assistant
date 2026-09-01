@@ -1,0 +1,89 @@
+{
+  "name": "configure_model",
+  "version": "1.0.0",
+  "description": {
+    "zh": "新增或更新一个模型配置（持久化；API Key 存入系统密钥库）。当用户要求接入/修改某个模型时使用。",
+    "en": "Add or update a model config (persisted; the API key goes to the OS keyring). Use when the user asks to hook up or modify a model."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "description": "显示名称（唯一标识，已存在则更新）"
+        },
+        "provider": {
+          "type": "string",
+          "description": "服务提供商：OpenAI / Anthropic / vLLM / Ollama / 自定义"
+        },
+        "model": {
+          "type": "string",
+          "description": "实际模型名，如 gpt-4o / qwen2.5"
+        },
+        "base_url": {
+          "type": "string",
+          "description": "接口地址（可选），如 https://api.openai.com/v1"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "API Key（可选；不填则保留原有）"
+        },
+        "model_type": {
+          "type": "string",
+          "enum": [
+            "llm",
+            "vlm"
+          ],
+          "description": "模型类型：llm=文本，vlm=多模态"
+        }
+      },
+      "required": [
+        "display_name",
+        "model"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "description": "display name (unique id; updates if it exists)"
+        },
+        "provider": {
+          "type": "string",
+          "description": "provider: OpenAI / Anthropic / vLLM / Ollama / Custom"
+        },
+        "model": {
+          "type": "string",
+          "description": "actual model id, e.g. gpt-4o / qwen2.5"
+        },
+        "base_url": {
+          "type": "string",
+          "description": "base URL (optional), e.g. https://api.openai.com/v1"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "API key (optional; keeps the existing one when omitted)"
+        },
+        "model_type": {
+          "type": "string",
+          "enum": [
+            "llm",
+            "vlm"
+          ],
+          "description": "model type: llm = text, vlm = multimodal"
+        }
+      },
+      "required": [
+        "display_name",
+        "model"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

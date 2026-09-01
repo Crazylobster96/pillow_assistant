@@ -3,6 +3,8 @@ return its visible text — for JS-rendered pages that http_request can't read."
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 import urllib.parse
 
 from pillow_assistant.core.i18n import t
@@ -13,18 +15,10 @@ MAX_TEXT = 60 * 1024
 TIMEOUT_MS = 20000
 
 
+@manifest_tool
 class BrowserReadTool:
     name = "browser_read"
     permission = Permission.NETWORK
-    description = t("tool.browser.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "url": {"type": "string", "description": t("tool.browser.url")},
-            "selector": {"type": "string", "description": t("tool.browser.selector")},
-        },
-        "required": ["url"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         url = (args.get("url") or "").strip()

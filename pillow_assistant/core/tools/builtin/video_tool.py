@@ -10,6 +10,8 @@ bundled binary).
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 import asyncio
 import json
 import shutil
@@ -91,23 +93,10 @@ def split_seconds_for(max_mb: float, duration: float, size_mb: float) -> int:
     return max(5, int(duration * (float(max_mb) / size_mb) * 0.9))
 
 
+@manifest_tool
 class ProcessVideoTool:
     name = "process_video"
     permission = Permission.WRITE_WS
-    description = t("tool.vid.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "path": {"type": "string", "description": t("tool.vid.path")},
-            "action": {"type": "string", "enum": ["probe", "split", "compress", "frames"],
-                       "description": t("tool.vid.action")},
-            "segment_seconds": {"type": "integer", "description": t("tool.vid.segment_seconds")},
-            "max_mb": {"type": "number", "description": t("tool.vid.max_mb")},
-            "max_height": {"type": "integer", "description": t("tool.vid.max_height")},
-            "frame_count": {"type": "integer", "description": t("tool.vid.frame_count")},
-        },
-        "required": ["path", "action"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         raw = (args.get("path") or "").strip()

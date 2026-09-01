@@ -10,6 +10,8 @@ the tool entirely.
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 import asyncio
 import os
 import re
@@ -63,15 +65,10 @@ def _safe_environment() -> dict[str, str]:
     }
 
 
+@manifest_tool
 class RunCliTool:
     name = "run_cli"
     permission = Permission.SYSTEM
-    description = t("tool.cli.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"command": {"type": "string", "description": t("tool.cli.command")}},
-        "required": ["command"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         cmd = (args.get("command") or "").strip()

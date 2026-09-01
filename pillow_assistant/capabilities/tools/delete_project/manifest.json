@@ -1,0 +1,39 @@
+{
+  "name": "delete_project",
+  "version": "1.0.0",
+  "description": {
+    "zh": "永久删除一个项目（含其对话历史与全部产物文件，不可恢复）。用户明确要求删除某个项目时使用；按项目名或 id 定位，多个同名时返回列表让用户确认。",
+    "en": "Permanently delete a project (including its conversation history and all artifact files; not recoverable). Use when the user explicitly asks to delete a project; locate it by name or id, and list candidates when several match."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "要删除的项目名称（或项目 id）"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "name (or id) of the project to delete"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

@@ -41,6 +41,7 @@ class ToolContext:
     project_memory: Any = None             # optional ProjectMemoryService for project-bound runs
     project_id: Optional[str] = None        # active project id, absent for one-off chat
     memory_request_count: int = 0           # bounded retrievals in the current Agent turn
+    skill_snapshot: list = field(default_factory=list)  # request-local resolved Skill metadata
 
 
 @dataclass

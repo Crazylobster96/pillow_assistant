@@ -1,0 +1,89 @@
+{
+  "name": "present_windows",
+  "version": "1.0.0",
+  "description": {
+    "zh": "在屏幕上同时打开多个展示窗口（最多 4 个），按用户要求并排（row）或上下（column）排列。当用户要求并排/分屏/多窗口对比展示多段内容或多个文件时调用。每个窗口给 title；展示【文件】（图片/Word/PDF/表格/代码等）必须用 path 传绝对路径，会按类型用对应查看器打开（图片看图、表格成表、Word 富文本），不要把文件内容读出来塞进 text；文件夹直接传文件夹路径，会展示其目录树结构，不要把里面的文件逐个展开；text 仅用于要展示的纯文字/Markdown 内容。",
+    "en": "Open several display windows at once (max 4), tiled side-by-side (row) or stacked (column) as the user asks. Call when the user wants to compare or view multiple pieces of content / files in separate windows. Give each window a title; for FILES (image/Word/PDF/table/code) you MUST pass the absolute path in `path` — they open in type-appropriate viewers — do not paste file contents into `text`; for a folder pass its path to show the directory tree, do not expand its files; `text` is only for plain text / Markdown content."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "要展示的窗口列表（1-4 个）",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "窗口标题"
+              },
+              "text": {
+                "type": "string",
+                "description": "要展示的文字内容"
+              },
+              "path": {
+                "type": "string",
+                "description": "要展示的文件绝对路径"
+              }
+            }
+          }
+        },
+        "layout": {
+          "type": "string",
+          "enum": [
+            "row",
+            "column"
+          ],
+          "description": "排列方式：row=左右并排，column=上下排列（默认 row）"
+        }
+      },
+      "required": [
+        "items"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "windows to show (1-4)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "window title"
+              },
+              "text": {
+                "type": "string",
+                "description": "text content to show"
+              },
+              "path": {
+                "type": "string",
+                "description": "absolute path of the file to show"
+              }
+            }
+          }
+        },
+        "layout": {
+          "type": "string",
+          "enum": [
+            "row",
+            "column"
+          ],
+          "description": "arrangement: row = side by side, column = stacked (default row)"
+        }
+      },
+      "required": [
+        "items"
+      ]
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

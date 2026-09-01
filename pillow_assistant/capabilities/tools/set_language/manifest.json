@@ -1,0 +1,47 @@
+{
+  "name": "set_language",
+  "version": "1.0.0",
+  "description": {
+    "zh": "切换应用界面与提示语言并持久化（zh=中文，en=English）。用户要求换语言时使用。",
+    "en": "Switch the app's UI/prompt language and persist it (zh = Chinese, en = English). Use when the user asks to change language."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "lang": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "description": "目标语言：zh 或 en"
+        }
+      },
+      "required": [
+        "lang"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "lang": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "description": "target language: zh or en"
+        }
+      },
+      "required": [
+        "lang"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

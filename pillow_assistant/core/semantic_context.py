@@ -18,6 +18,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Optional
 
+from pillow_assistant.capabilities.prompt_registry import render_prompt
 from pillow_assistant.core import context_budget
 
 
@@ -486,16 +487,8 @@ def chunk_source(records: list[SourceRecord], max_tokens: int) -> list[str]:
 def render_capsule(capsule: dict[str, Any], *, verified: bool) -> str:
     status = "verified" if verified else "unverified"
     payload = json.dumps(capsule, ensure_ascii=False, indent=2, default=str)
-    return (
-        f"{CAPSULE_OPEN}\n"
-        f"status: {status}\n"
-        "This capsule replaces archived source text. Preserve its requirements, decisions, "
-        "exact fragments, unresolved questions, and source IDs. Source IDs refer to raw messages "
-        "retained by the running Agent session or to existing conversation, project, and file "
-        "stores; request the original when an available retrieval tool is needed.\n"
-        f"{payload}\n"
-        f"{CAPSULE_CLOSE}"
-    )
+    return render_prompt("context.capsule.system", status=status, payload=payload)
+
 
 
 def resolve_compression_profile(storage: Any, vault: Any, main_cfg: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -541,27 +534,15 @@ async def _compress_chunk(
     messages = [
         {
             "role": "system",
-            "content": (
-                "CONTEXT_COMPRESSOR\n"
-                "You are a loss-minimizing context compressor. Extract only; never infer, "
-                "invent, resolve conflicts, or mark work complete without explicit evidence. "
-                "Preserve user requirements, decisions with reasons, facts, file paths, versions, "
-                "numbers, commands, code/API identifiers, tool state, errors, open questions, and "
-                "conflicts. Every list item must contain source_ids copied from the supplied source "
-                "labels. Put text that must remain verbatim in exact_fragments. Return one JSON "
-                "object only, in the source language."
-            ),
+            "content": render_prompt("context.compressor.system"),
+
         },
         {
             "role": "user",
-            "content": (
-                "CURRENT TASK (use only to rank relevance; it is preserved separately and is not "
-                "evidence for source-attributed facts):\n"
-                f"{_query_hint(active_request)}\n\n"
-                f"SOURCE MATERIAL:\n{source}\n\n"
-                "Return this schema:\n"
-                '{"current_goal":"","requirements":[],"decisions":[],"facts":[],"artifacts":[], '
-                '"tool_state":[],"open_questions":[],"exact_fragments":[],"conflicts":[],"source_ids":[]}'
+            "content": render_prompt(
+                "context.compressor.request",
+                active_request=_query_hint(active_request),
+                source_material=source,
             ),
         },
     ]
@@ -581,19 +562,15 @@ async def _verify_chunk(
     messages = [
         {
             "role": "system",
-            "content": (
-                "CONTEXT_VERIFIER\n"
-                "Compare the capsule against the source. Reject invented facts, changed numbers, "
-                "lost requirements/decisions/open work, invalid source IDs, and altered exact "
-                "fragments. Return JSON only. If invalid, provide a complete corrected_capsule."
-            ),
+            "content": render_prompt("context.verifier.system"),
+
         },
         {
             "role": "user",
-            "content": (
-                f"SOURCE:\n{source}\n\nCAPSULE:\n"
-                f"{json.dumps(capsule, ensure_ascii=False)}\n\n"
-                '{"valid":true,"missing_critical":[],"distortions":[],"corrected_capsule":null}'
+            "content": render_prompt(
+                "context.verifier.request",
+                source_material=source,
+                capsule=json.dumps(capsule, ensure_ascii=False),
             ),
         },
     ]
@@ -632,12 +609,8 @@ async def _reduce_capsules(
             messages = [
                 {
                     "role": "system",
-                    "content": (
-                        "CONTEXT_REDUCER\n"
-                        "Merge verified context capsules without inventing or dropping requirements, "
-                        "decisions, exact fragments, open questions, conflicts, or source IDs. Deduplicate "
-                        "only genuinely identical items. Return the capsule schema as one JSON object."
-                    ),
+                    "content": render_prompt("context.reducer.system"),
+
                 },
                 {
                     "role": "user",
@@ -848,7 +821,7 @@ def _remove_marked_text(text: str) -> tuple[str, str]:
     if state_block:
         replacement_lines.append(state_block)
     replacement_lines.append(
-        "[Supporting context moved to the semantic context capsule with source provenance.]"
+        render_prompt("context.supporting_moved")
     )
     replacement_lines.append(context_budget.CONTEXT_CLOSE)
     replacement = (

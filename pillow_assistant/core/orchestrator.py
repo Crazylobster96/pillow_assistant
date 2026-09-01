@@ -97,7 +97,6 @@ class Orchestrator:
                 self.project_memory = ProjectMemoryService(backend)
         except Exception:
             self.project_memory = None
-        self._register_skills()
 
     # -- chat history persistence (one-off conversations, not project-bound) --
     @staticmethod
@@ -128,16 +127,19 @@ class Orchestrator:
         except OSError:
             pass
 
-    def _register_skills(self) -> None:
-        try:
-            from pillow_assistant.core.skills import SkillStore
-            from pillow_assistant.core.tools.builtin.skill_tool import SkillTool
+    def _registry_for(self, project_root: Path | None = None):
+        """Build a request-local registry and resolve layered Skills without cross-run leakage."""
+        from pillow_assistant.capabilities.skill_registry import CapabilitySkillRegistry
+        from pillow_assistant.core.tools.builtin.skill_tool import SkillTool
 
-            skills = SkillStore(Path.home() / ".pillow" / "skills").load()
-            if skills:
-                self.registry.register(SkillTool(skills))
-        except Exception:
-            pass
+        registry = self.registry.clone()
+        project_skills = project_root / ".pillow" / "skills" if project_root is not None else None
+        catalog = CapabilitySkillRegistry(project_root=project_skills)
+        skills = catalog.load()
+        mode = "project" if project_root is not None else "chat"
+        if skills:
+            registry.register(SkillTool(skills, available_tools=registry.names(mode)))
+        return registry, catalog.snapshot()
 
     async def _ensure_mcp(self) -> None:
         if self._mcp_loaded:
@@ -152,17 +154,18 @@ class Orchestrator:
         except Exception:
             pass
 
-    def _agent(self, cfg, api_key, workspace, emit, refs, audit, request_id="", project_id=None):
+    def _agent(self, cfg, api_key, workspace, emit, refs, audit, request_id="", project_id=None, project_root=None):
         ask = None
         if self.ask_broker is not None:
             async def ask(spec, _b=self.ask_broker, _e=emit, _rid=request_id):
                 return await _b.ask(_e, _rid, spec)
+        registry, skill_snapshot = self._registry_for(Path(project_root) if project_root else None)
         ctx = ToolContext(workspace=Path(workspace), session=self.pm.session, emit=emit,
                           vault=self.vault, references=list(refs or []), audit=audit,
                           undo_manager=self.undo_manager, request_id=request_id,
                           storage=self.storage, ask=ask, project_store=self.pm.store,
                           project_memory=self.project_memory, project_id=project_id,
-                          memory_request_count=0)
+                          memory_request_count=0, skill_snapshot=skill_snapshot)
         # User-adjustable step budget (set_max_steps tool); read per request.
         try:
             from pillow_assistant.core.settings import load_settings
@@ -170,7 +173,7 @@ class Orchestrator:
             steps = max(1, min(steps, 500))
         except Exception:
             steps = self.max_steps
-        return ToolLoopAgent(cfg=cfg, api_key=api_key, registry=self.registry, ctx=ctx,
+        return ToolLoopAgent(cfg=cfg, api_key=api_key, registry=registry, ctx=ctx,
                              max_steps=steps)
 
     async def __call__(self, request: AppRequest, emit: Emit) -> None:
@@ -269,7 +272,7 @@ class Orchestrator:
             except Exception:
                 memory_ctx = None
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
-                            request_id=request.id, project_id=project.id)
+                            request_id=request.id, project_id=project.id, project_root=project.root)
         resume_key = (project.id, session_id)
         resume_messages = None
         if _is_resume_request(request.prompt):

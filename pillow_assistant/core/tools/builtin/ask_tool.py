@@ -7,28 +7,16 @@ is fed back to the model so it can continue.
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 from pillow_assistant.core.i18n import t
 from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 
 
+@manifest_tool
 class AskUserTool:
     name = "ask_user"
     permission = Permission.READONLY
-    description = t("tool.ask.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "question": {"type": "string", "description": t("tool.ask.question")},
-            "options": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": t("tool.ask.options"),
-            },
-            "allow_text": {"type": "boolean", "description": t("tool.ask.allow_text")},
-            "multi_select": {"type": "boolean", "description": t("tool.ask.multi")},
-        },
-        "required": ["question"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         ask = getattr(ctx, "ask", None)

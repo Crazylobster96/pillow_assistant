@@ -1,0 +1,69 @@
+{
+  "name": "ask_user",
+  "version": "1.0.0",
+  "description": {
+    "zh": "当你不确定、需要用户确认或补充信息时，弹出对话框向用户提问并等待回答。可给 options 让用户从选项中选，或 allow_text 让用户自由输入；不要用它替代你能自己完成的判断。",
+    "en": "When you're unsure or need the user to confirm or supply information, pop up a dialog to ask and wait for the answer. Provide options for a multiple-choice pick, or allow_text for free input; don't use it to offload judgements you can make yourself."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "要问用户的问题"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "可选项列表（让用户从中选择，可选）"
+        },
+        "allow_text": {
+          "type": "boolean",
+          "description": "是否允许用户自由输入文字（无选项时默认允许）"
+        },
+        "multi_select": {
+          "type": "boolean",
+          "description": "是否允许多选（用户可勾选多个选项，并可在「其他」里补充）"
+        }
+      },
+      "required": [
+        "question"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "the question to ask the user"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "list of choices for the user to pick from (optional)"
+        },
+        "allow_text": {
+          "type": "boolean",
+          "description": "whether to allow free-text input (default on when there are no options)"
+        },
+        "multi_select": {
+          "type": "boolean",
+          "description": "whether to allow multi-select (user can check several options and add their own under \"Other\")"
+        }
+      },
+      "required": [
+        "question"
+      ]
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

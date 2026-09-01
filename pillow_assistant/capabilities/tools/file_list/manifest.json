@@ -1,0 +1,33 @@
+{
+  "name": "file_list",
+  "version": "1.0.0",
+  "description": {
+    "zh": "列出目录内容。可列：工作目录（或其子目录），或已引用的目录。",
+    "en": "List a directory: the workspace (or a subfolder), or a referenced folder."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "目录路径，默认当前工作目录"
+        }
+      }
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "directory path, defaults to the workspace"
+        }
+      }
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

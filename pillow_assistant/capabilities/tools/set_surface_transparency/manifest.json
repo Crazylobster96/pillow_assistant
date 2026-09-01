@@ -1,0 +1,85 @@
+{
+  "name": "set_surface_transparency",
+  "version": "1.0.0",
+  "description": {
+    "zh": "Adjust the frosted-glass background. Opacity and transparency are exact complements: opacity + transparency = 100. Opacity 100 is fully opaque; opacity 0 is fully transparent. Transparency 100 is fully transparent; transparency 0 is fully opaque. For relative wording such as 'more transparent', use mode='more_transparent'; for 'more opaque', use mode='less_transparent'.",
+    "en": "Adjust the frosted-glass background. Opacity and transparency are exact complements: opacity + transparency = 100. Opacity 100 is fully opaque; opacity 0 is fully transparent. Transparency 100 is fully transparent; transparency 0 is fully opaque. For relative wording such as 'more transparent', use mode='more_transparent'; for 'more opaque', use mode='less_transparent'."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "set",
+            "more_transparent",
+            "less_transparent"
+          ],
+          "description": "Use set for an explicit opacity or transparency percentage."
+        },
+        "transparency": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Only for mode=set. 0 is fully opaque; 100 is fully transparent."
+        },
+        "opacity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Only for mode=set. 0 is fully transparent; 100 is fully opaque."
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 40,
+          "description": "Relative adjustment size, default 15 percentage points."
+        }
+      },
+      "required": [
+        "mode"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "set",
+            "more_transparent",
+            "less_transparent"
+          ],
+          "description": "Use set for an explicit opacity or transparency percentage."
+        },
+        "transparency": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Only for mode=set. 0 is fully opaque; 100 is fully transparent."
+        },
+        "opacity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Only for mode=set. 0 is fully transparent; 100 is fully opaque."
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 40,
+          "description": "Relative adjustment size, default 15 percentage points."
+        }
+      },
+      "required": [
+        "mode"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

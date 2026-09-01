@@ -4,17 +4,18 @@ user's request, persisted across restarts."""
 
 from __future__ import annotations
 
+from pillow_assistant.capabilities.tool_manifest import manifest_tool
+
 from pillow_assistant.core import i18n
 from pillow_assistant.core.i18n import t
 from pillow_assistant.core.model_roles import assign, load_roles
 from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 
 
+@manifest_tool
 class ListModelsTool:
     name = "list_models"
     permission = Permission.READONLY
-    description = t("tool.lm.desc")
-    parameters = {"type": "object", "properties": {}}
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         storage = getattr(ctx, "storage", None)
@@ -44,23 +45,10 @@ class ListModelsTool:
         return ToolResult(ok=True, text="\n".join(lines))
 
 
+@manifest_tool
 class ConfigureModelTool:
     name = "configure_model"
     permission = Permission.SYSTEM
-    description = t("tool.cm.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "display_name": {"type": "string", "description": t("tool.cm.display_name")},
-            "provider": {"type": "string", "description": t("tool.cm.provider")},
-            "model": {"type": "string", "description": t("tool.cm.model")},
-            "base_url": {"type": "string", "description": t("tool.cm.base_url")},
-            "api_key": {"type": "string", "description": t("tool.cm.api_key")},
-            "model_type": {"type": "string", "enum": ["llm", "vlm"],
-                           "description": t("tool.cm.model_type")},
-        },
-        "required": ["display_name", "model"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         storage = getattr(ctx, "storage", None)
@@ -105,20 +93,10 @@ class ConfigureModelTool:
                                           provider=provider, model=model, type=model_type))
 
 
+@manifest_tool
 class AssignModelRoleTool:
     name = "assign_model_role"
     permission = Permission.SYSTEM
-    description = t("tool.ar.desc")
-    parameters = {
-        "type": "object",
-        "properties": {
-            "role": {"type": "string", "enum": ["chat", "vision", "asr", "compression"],
-                     "description": t("tool.ar.role")},
-            "model": {"type": "string", "description": t("tool.ar.model")},
-            "whisper_size": {"type": "string", "description": t("tool.ar.size")},
-        },
-        "required": ["role", "model"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         role = (args.get("role") or "").strip().lower()
@@ -150,15 +128,10 @@ class AssignModelRoleTool:
         return ToolResult(ok=True, text=t("tool.ar.saved", role=role, value=value))
 
 
+@manifest_tool
 class SetMaxStepsTool:
     name = "set_max_steps"
     permission = Permission.SYSTEM
-    description = t("tool.steps.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"steps": {"type": "integer", "description": t("tool.steps.steps")}},
-        "required": ["steps"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         try:
@@ -172,39 +145,10 @@ class SetMaxStepsTool:
         return ToolResult(ok=True, text=t("tool.steps.done", n=steps))
 
 
+@manifest_tool
 class SetSurfaceTransparencyTool:
     name = "set_surface_transparency"
     permission = Permission.SYSTEM
-    description = (
-        "Adjust the frosted-glass background. Opacity and transparency are exact "
-        "complements: opacity + transparency = 100. Opacity 100 is fully opaque; "
-        "opacity 0 is fully transparent. Transparency 100 is fully transparent; "
-        "transparency 0 is fully opaque. For relative wording such as 'more transparent', "
-        "use mode='more_transparent'; for 'more opaque', use mode='less_transparent'."
-    )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "mode": {
-                "type": "string",
-                "enum": ["set", "more_transparent", "less_transparent"],
-                "description": "Use set for an explicit opacity or transparency percentage.",
-            },
-            "transparency": {
-                "type": "integer", "minimum": 0, "maximum": 100,
-                "description": "Only for mode=set. 0 is fully opaque; 100 is fully transparent.",
-            },
-            "opacity": {
-                "type": "integer", "minimum": 0, "maximum": 100,
-                "description": "Only for mode=set. 0 is fully transparent; 100 is fully opaque.",
-            },
-            "amount": {
-                "type": "integer", "minimum": 1, "maximum": 40,
-                "description": "Relative adjustment size, default 15 percentage points.",
-            },
-        },
-        "required": ["mode"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         mode = (args.get("mode") or "").strip().lower()
@@ -257,16 +201,10 @@ class SetSurfaceTransparencyTool:
                   f"(background opacity {opacity}%). Open display windows updated."),
         )
 
+@manifest_tool
 class SetLanguageTool:
     name = "set_language"
     permission = Permission.SYSTEM
-    description = t("tool.lang.desc")
-    parameters = {
-        "type": "object",
-        "properties": {"lang": {"type": "string", "enum": ["zh", "en"],
-                                "description": t("tool.lang.lang")}},
-        "required": ["lang"],
-    }
 
     async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
         lang = (args.get("lang") or "").strip().lower()
