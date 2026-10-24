@@ -195,3 +195,42 @@ def test_bundled_models_dir_is_preferred(tmp_path, monkeypatch):
     monkeypatch.setenv("PILLOW_MODELS_DIR", str(tmp_path))
     assert asr._local_model("SenseVoiceSmall", "iic/SenseVoiceSmall") == str(tmp_path / "SenseVoiceSmall")
     assert asr._local_model("fsmn-vad", "fsmn-vad") == "fsmn-vad"
+
+
+def test_shortcuts_created_once_and_after_move(bundle):
+    (bundle.root / "PillowAssistant.exe").write_bytes(b"MZ")
+    calls = []
+
+    def fake_run(target, workdir, icon):
+        calls.append((target, workdir, icon))
+        return ["Desktop/Pillow Assistant.lnk", "Programs/Pillow Assistant.lnk"]
+
+    assert launcher.create_shortcuts(bundle, run=fake_run)
+    target, workdir, icon = calls[0]
+    assert target == bundle.root / "PillowAssistant.exe" and workdir == bundle.root
+    assert icon.endswith("PillowAssistant.exe,0")
+    # A shortcut the user deleted is not recreated on later starts...
+    assert launcher.create_shortcuts(bundle, run=fake_run) == []
+    # ...unless forced, or the bundle folder moved.
+    (bundle.root / "PillowAssistant.ico").write_bytes(b"\0")
+    assert launcher.create_shortcuts(bundle, force=True, run=fake_run)
+    assert calls[-1][2].endswith("PillowAssistant.ico,0")
+    state = json.loads(bundle.state.read_text())
+    state["shortcuts_for"] = "D:/old-location"
+    bundle.state.write_text(json.dumps(state))
+    assert launcher.create_shortcuts(bundle, run=fake_run)
+    assert len(calls) == 3
+
+
+def test_shortcut_failure_is_not_recorded(bundle):
+    (bundle.root / "PillowAssistant.exe").write_bytes(b"MZ")
+
+    def failing(target, workdir, icon):
+        raise OSError("COM unavailable")
+
+    assert launcher.create_shortcuts(bundle, run=failing) == []
+    assert "shortcuts_for" not in launcher._read_json(bundle.state)
+
+
+def test_no_shortcuts_outside_a_bundle(bundle):
+    assert launcher.create_shortcuts(bundle, run=lambda *a: ["x"]) == []

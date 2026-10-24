@@ -95,10 +95,15 @@ Run $Py @("-E", "-s", (Join-Path $Bundle "launcher.pyw"), "--stamp-version", $Sh
 # 5. No-console starter exe, compiled with the .NET Framework C# compiler.
 Step "PillowAssistant.exe"
 $Csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-Run $Csc @("/nologo", "/target:winexe", "/codepage:65001", "/optimize+",
+$Ico = Join-Path $Bundle "PillowAssistant.ico"
+$IconArgs = @()
+& $Py -E -s (Join-Path $PSScriptRoot "make_icon.py") (Join-Path $Bundle "app") $Ico
+if ($LASTEXITCODE -eq 0 -and (Test-Path $Ico)) { $IconArgs = @("/win32icon:$Ico") }
+else { Write-Warning "icon rendering failed; PillowAssistant.exe will use the default icon" }
+Run $Csc (@("/nologo", "/target:winexe", "/codepage:65001", "/optimize+") + $IconArgs + @(
            "/out:$(Join-Path $Bundle 'PillowAssistant.exe')",
            "/reference:System.Windows.Forms.dll", "/reference:System.Core.dll",
-           (Join-Path $PSScriptRoot "PillowAssistant.cs"))
+           (Join-Path $PSScriptRoot "PillowAssistant.cs")))
 
 # 6. Optional offline speech models.
 if ($ModelsDir) {
