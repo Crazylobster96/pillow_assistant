@@ -12,6 +12,8 @@ Tuning via environment variables:
   * PILLOW_ASR_MODEL   - whisper size tiny/base/small/medium (default small);
                          ignored by sensevoice
   * PILLOW_ASR_LANG    - force language, e.g. zh / en (default: auto-detect)
+  * PILLOW_MODELS_DIR  - folder with pre-downloaded models (offline bundle):
+                         SenseVoiceSmall/, fsmn-vad/, faster-whisper-<size>/
 
 Graceful: ``available()`` is False when no backend is installed and callers
 fall back to typed input. Models load lazily and are cached; the first call may
@@ -43,6 +45,16 @@ def _have(module: str) -> bool:
 
 
 _backend_cache: Optional[str] = None  # "" = probed, none installed
+
+
+def _local_model(name: str, default: str) -> str:
+    """Prefer a pre-downloaded model folder (offline bundle) over a hub id."""
+    base = os.environ.get("PILLOW_MODELS_DIR", "").strip()
+    if base:
+        candidate = os.path.join(base, name)
+        if os.path.isdir(candidate):
+            return candidate
+    return default
 
 
 def _roles_asr() -> dict:
@@ -106,8 +118,8 @@ def _sensevoice_transcribe(wav_path: str, language: Optional[str]) -> str:
     if _sv_model is None:
         from funasr import AutoModel
         _sv_model = AutoModel(
-            model="iic/SenseVoiceSmall",
-            vad_model="fsmn-vad",
+            model=_local_model("SenseVoiceSmall", "iic/SenseVoiceSmall"),
+            vad_model=_local_model("fsmn-vad", "fsmn-vad"),
             vad_kwargs={"max_single_segment_time": 30000},
             device="cpu",
             disable_update=True,
@@ -138,7 +150,8 @@ def _whisper_model(size: Optional[str] = None):
     size = size or _whisper_size()
     if _wh_model is None or _wh_size != size:
         from faster_whisper import WhisperModel
-        _wh_model = WhisperModel(size, device="cpu", compute_type="int8")
+        _wh_model = WhisperModel(_local_model(f"faster-whisper-{size}", size),
+                                 device="cpu", compute_type="int8")
         _wh_size = size
     return _wh_model
 

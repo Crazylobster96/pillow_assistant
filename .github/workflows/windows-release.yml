@@ -1,0 +1,112 @@
+name: Windows offline release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "packaging/windows/**"
+      - ".github/workflows/windows-release.yml"
+      - "requirements.txt"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a GitHub release"
+        type: boolean
+        default: true
+      include_models:
+        description: "Also publish the offline speech-model pack"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" }
+          else { $v = "$(Get-Date -Format yyyyMMdd)-$("${{ github.sha }}".Substring(0,7))" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build bundle
+        shell: pwsh
+        run: ./packaging/windows/build.ps1 -OutDir dist -Version ${{ steps.ver.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PillowAssistant-windows-x64-${{ steps.ver.outputs.version }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          compression-level: 0
+          retention-days: ${{ github.event_name == 'pull_request' && 7 || 30 }}
+
+  models:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.include_models)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download models
+        run: |
+          pip install modelscope huggingface_hub
+          python packaging/windows/prefetch_models.py dist/PillowAssistant/models
+          cd dist && zip -r -0 PillowAssistant-models.zip PillowAssistant
+          sha256sum PillowAssistant-models.zip > PillowAssistant-models.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PillowAssistant-models
+          path: |
+            dist/PillowAssistant-models.zip
+            dist/PillowAssistant-models.zip.sha256
+          compression-level: 0
+          retention-days: 30
+
+  release:
+    needs: [bundle, models]
+    if: >-
+      always() && needs.bundle.result == 'success' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('win-{0}', needs.bundle.outputs.version) }}
+          target_commitish: ${{ github.sha }}
+          name: Pillow Assistant ${{ needs.bundle.outputs.version }} (Windows offline)
+          body: |
+            Windows 离线完整包：已内置 Python 运行时、全部依赖（含 PyTorch CPU / SenseVoice / Whisper / Playwright Chromium / ffmpeg），解压即用。
+
+            1. 下载 `PillowAssistant-windows-x64-*.zip`，解压到任意可写目录（如 `D:\PillowAssistant`），双击 `PillowAssistant.exe`。
+            2. 可选：下载 `PillowAssistant-models.zip`，解压到与主包相同的位置（会合并出 `PillowAssistant\models\`），语音转文字即可完全离线使用。
+            3. 联网时自动从 GitHub 获取最新代码并在下次启动时升级；设置见 `update.json`。
+
+            Commit: ${{ github.sha }}
+          files: |
+            dist/*.zip
+            dist/*.sha256

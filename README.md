@@ -22,6 +22,8 @@ pillow-assistant                      # 启动（等同 python -m pillow_assista
 
 可选 extras：`sandbox`（pandas/matplotlib，Agent 数据与画图）、`voice`（录音）、`asr`（SenseVoice 中文语音转写）、`asr-whisper`（faster-whisper 回退）、`previews`（PDF/Excel/Word/PPT 预览）、`video`（视频切分/压缩/抽帧，也可直接装系统 ffmpeg）、`browser`（Playwright 取网页）、`mcp`（挂载外部 MCP server）、`all`（全部）。
 
+**Windows 离线完整包**：在 [Releases](https://github.com/Crazylobster96/pillow_assistant/releases) 下载 `PillowAssistant-windows-x64-*.zip`，解压后双击 `PillowAssistant.exe` 即可，已内置 Python 和全部依赖，联网时自动按 GitHub 最新代码升级。详见 [packaging/windows/README.md](packaging/windows/README.md)。
+
 开发态运行（不安装）：
 
 ```bash
@@ -163,6 +165,8 @@ pillow-assistant                      # launch (same as python -m pillow_assista
 ```
 
 Extras: `sandbox` (pandas/matplotlib for Agent data + charts), `voice` (recording), `asr` (SenseVoice Chinese STT), `asr-whisper` (faster-whisper fallback), `previews` (PDF/Excel/Word/PPT), `video` (split/compress/extract frames; system ffmpeg also works), `browser` (Playwright), `mcp` (external MCP servers), `all`.
+
+**Offline Windows bundle**: download `PillowAssistant-windows-x64-*.zip` from [Releases](https://github.com/Crazylobster96/pillow_assistant/releases), unzip and double-click `PillowAssistant.exe`. Python and every dependency are bundled, and it upgrades itself from the latest GitHub code when online. See [packaging/windows/README.md](packaging/windows/README.md).
 
 Run from source without installing:
 
