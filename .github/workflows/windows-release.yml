@@ -54,6 +54,16 @@ jobs:
         shell: pwsh
         run: ./packaging/windows/build.ps1 -OutDir dist -Version ${{ steps.ver.outputs.version }}
 
+      - name: Shortcut smoke test
+        shell: pwsh
+        run: |
+          ./dist/PillowAssistant/python/python.exe -E -s ./dist/PillowAssistant/launcher.pyw --create-shortcuts
+          if ($LASTEXITCODE -ne 0) { throw "shortcut creation failed" }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Pillow Assistant.lnk'
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          Write-Host "$lnk -> $target"
+          if (-not $target.EndsWith('PillowAssistant.exe')) { throw "unexpected shortcut target: $target" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: PillowAssistant-windows-x64-${{ steps.ver.outputs.version }}

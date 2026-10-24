@@ -66,6 +66,9 @@ DEFAULT_CONFIG = {
     "check_interval_hours": 6,
     "startup_delay_seconds": 20,
     "timeout_seconds": 15,
+    # Create desktop + Start menu shortcuts on first start (and again after
+    # the bundle folder is moved). A shortcut the user deleted stays deleted.
+    "desktop_shortcut": True,
 }
 
 USER_AGENT = "PillowAssistant-Updater"
@@ -427,6 +430,69 @@ def start_background_checker(paths: Paths, cfg: dict) -> Optional[threading.Thre
     return thread
 
 
+# -- shortcuts ---------------------------------------------------------------
+SHORTCUT_NAME = "Pillow Assistant.lnk"
+
+# Paths come in through environment variables so non-ASCII folders (e.g. a
+# Chinese user name) never need quoting inside the script.
+_SHORTCUT_PS = r"""
+$ErrorActionPreference = 'Stop'
+$ws = New-Object -ComObject WScript.Shell
+foreach ($folder in @([Environment]::GetFolderPath('Desktop'),
+                      [Environment]::GetFolderPath('Programs'))) {
+    if (-not $folder) { continue }
+    $link = Join-Path $folder $env:PILLOW_LNK_NAME
+    $s = $ws.CreateShortcut($link)
+    $s.TargetPath = $env:PILLOW_LNK_TARGET
+    $s.WorkingDirectory = $env:PILLOW_LNK_DIR
+    $s.IconLocation = $env:PILLOW_LNK_ICON
+    $s.Description = 'Pillow Assistant'
+    $s.Save()
+    Write-Output $link
+}
+"""
+
+
+def _run_shortcut_script(target: Path, workdir: Path, icon: str) -> list:
+    env = dict(os.environ, PILLOW_LNK_NAME=SHORTCUT_NAME, PILLOW_LNK_TARGET=str(target),
+               PILLOW_LNK_DIR=str(workdir), PILLOW_LNK_ICON=icon)
+    proc = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+         "-Command", _SHORTCUT_PS],
+        env=env, capture_output=True, text=True, timeout=60,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if proc.returncode != 0:
+        raise OSError(proc.stderr.strip() or f"powershell exited {proc.returncode}")
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def create_shortcuts(paths: Paths, force: bool = False,
+                     run: Callable[[Path, Path, str], list] = _run_shortcut_script) -> list:
+    """Create desktop + Start menu shortcuts to PillowAssistant.exe once.
+
+    Recorded in ``updates/state.json``; repeated only when forced or when the
+    bundle now lives in a different folder than when the shortcuts were made.
+    """
+    target = paths.root / "PillowAssistant.exe"
+    if not target.is_file():
+        return []
+    state = _read_json(paths.state)
+    if not force and state.get("shortcuts_for") == str(paths.root):
+        return []
+    ico = paths.root / "PillowAssistant.ico"
+    icon = f"{ico},0" if ico.is_file() else f"{target},0"
+    try:
+        links = run(target, paths.root, icon)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("could not create shortcuts: %s", exc)
+        return []
+    state = _read_json(paths.state)  # re-read: the updater may have written it
+    state["shortcuts_for"] = str(paths.root)
+    _write_json(paths.state, state)
+    log.info("created shortcuts: %s", ", ".join(links))
+    return links
+
+
 # -- runtime environment -----------------------------------------------------
 def setup_logging(log_dir: Path, console: bool) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -544,6 +610,8 @@ def main(argv: Optional[list] = None) -> int:
                         help="check GitHub, download and apply an update, then exit")
     parser.add_argument("--rollback", action="store_true", help="restore the previous version")
     parser.add_argument("--version", action="store_true", help="print the installed version")
+    parser.add_argument("--create-shortcuts", action="store_true",
+                        help="(re)create the desktop and Start menu shortcuts, then exit")
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--stamp-version", nargs=2, metavar=("SHA", "REF"), help=argparse.SUPPRESS)
     parser.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)
@@ -558,12 +626,17 @@ def main(argv: Optional[list] = None) -> int:
         return 0
 
     log_dir = Path.home() / ".pillow" / "logs"
-    interactive = args.update_now or args.rollback or args.self_test
+    interactive = args.update_now or args.rollback or args.self_test or args.create_shortcuts
     setup_logging(log_dir, console=interactive and sys.stdout is not None)
     setup_environment(paths)
     cfg = load_config(paths)
     if args.no_update:
         cfg["enabled"] = False
+
+    if args.create_shortcuts:
+        links = create_shortcuts(paths, force=True)
+        print("\n".join(links) if links else "no shortcuts created (see launcher.log)")
+        return 0 if links else 1
 
     if args.rollback:
         ok = rollback(paths)
@@ -597,6 +670,9 @@ def main(argv: Optional[list] = None) -> int:
                 except Exception:  # noqa: BLE001 - never block start-up
                     log.exception("applying update failed")
     start_background_checker(paths, cfg)
+    if os.name == "nt" and cfg.get("desktop_shortcut", True):
+        threading.Thread(target=create_shortcuts, args=(paths,), name="pillow-shortcuts",
+                         daemon=True).start()
 
     sys.argv = [sys.argv[0]] + app_args
     from pillow_assistant.app import main as app_main

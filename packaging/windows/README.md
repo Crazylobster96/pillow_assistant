@@ -22,7 +22,8 @@ PillowAssistant/
 
 1. 从 Releases 下载 `PillowAssistant-windows-x64-*.zip`，解压到一个**可写**目录（如 `D:\PillowAssistant`，不要放在 `C:\Program Files`，否则无法自动升级）。
 2. 想让语音转文字完全离线：再下载 `PillowAssistant-models.zip`，解压到同一位置（会合并出 `PillowAssistant\models\`）。不装模型也能用，首次语音识别时会联网下载。
-3. 双击 `PillowAssistant.exe`。数据和配置仍保存在 `%USERPROFILE%\.pillow\`，升级或重新解压都不会丢失。
+3. 双击 `PillowAssistant.exe`。首次启动会自动在桌面和开始菜单创建「Pillow Assistant」快捷方式，之后从快捷方式启动即可。删掉的快捷方式不会被再次创建；把文件夹挪到别处后再启动一次，快捷方式会自动指向新位置；也可以随时用 `PillowAssistant-console.bat --create-shortcuts` 重新生成。
+4. 数据和配置仍保存在 `%USERPROFILE%\.pillow\`，升级或重新解压都不会丢失。
 
 ## 自动升级
 
@@ -40,6 +41,7 @@ PillowAssistant/
 | `channel` | `"branch"` | `branch` 跟随分支最新提交；`release` 只跟随最新 GitHub Release |
 | `branch` | `"main"` | `channel=branch` 时跟随的分支 |
 | `check_interval_hours` | `6` | 检查间隔 |
+| `desktop_shortcut` | `true` | 首次启动时创建桌面和开始菜单快捷方式 |
 | `repo` | `Crazylobster96/pillow_assistant` | 源仓库；私有仓库可设置环境变量 `PILLOW_UPDATE_TOKEN` |
 
 ## 构建
