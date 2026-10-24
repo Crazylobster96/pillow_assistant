@@ -23,5 +23,7 @@ torchaudio>=2.0
 faster-whisper>=1.0
 # T2 — optional, mount external MCP servers' tools (degrades gracefully without)
 mcp>=1.0
+# Video — bundled ffmpeg binary for split/compress/thumbnails (system ffmpeg also works)
+imageio-ffmpeg>=0.4
 # T3 — optional, headless browser tool for JS-rendered pages (run `playwright install chromium`)
 playwright>=1.40
