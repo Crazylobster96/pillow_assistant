@@ -1,8 +1,8 @@
-"""Suggest the text-to-cad-anatomy edition when the user talks about CAD.
+"""Suggest the text-to-cad-to-cam edition when the user talks about CAD.
 
 The standard edition ships no CAD / CAM / concept-diagram tools. When a
 message mentions them, the answer starts with a one-line pointer to the
-edition that does (the Windows offline package tagged ``-text-to-cad-anatomy``).
+edition that does (the Windows offline package tagged ``-text-to-cad-to-cam``).
 It shows once per run, and never in that edition itself: the daily sync
 merges main into the text-to-cad branch, so this module ships there too and
 switches itself off when the CAD tools are present.
@@ -15,7 +15,7 @@ from typing import Optional
 
 from pillow_assistant.core.cad_intent import mentions_cad
 
-RELEASES_URL = "https://github.com/Crazylobster96/pillow_assistant/releases?q=text-to-cad-anatomy&expanded=true"
+RELEASES_URL = "https://github.com/Crazylobster96/pillow_assistant/releases?q=text-to-cad&expanded=true"
 
 _shown = False
 
