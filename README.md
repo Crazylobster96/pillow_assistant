@@ -20,7 +20,7 @@ pip install ".[previews,asr,video]"   # 按需组合（文件预览 / 语音转�
 pillow-assistant                      # 启动（等同 python -m pillow_assistant）
 ```
 
-可选 extras：`sandbox`（pandas/matplotlib，Agent 数据与画图）、`voice`（录音）、`asr`（SenseVoice 中文语音转写）、`asr-whisper`（faster-whisper 回退）、`previews`（PDF/Excel/Word/PPT 预览）、`video`（视频切分/压缩/抽帧，也可直接装系统 ffmpeg）、`browser`（Playwright 取网页）、`mcp`（挂载外部 MCP server）、`all`（全部）。
+可选 extras：`sandbox`（pandas/matplotlib，Agent 数据与画图）、`voice`（录音）、`asr`（SenseVoice 中文语音转写）、`asr-whisper`（faster-whisper 回退）、`previews`（PDF/Excel/Word/PPT 预览）、`video`（视频切分/压缩/抽帧，也可直接装系统 ffmpeg）、`browser`（Playwright 取网页）、`mcp`（挂载外部 MCP server）、`cad`（uv，text-to-cad 文本生成 CAD）、`all`（全部）。
 
 **Windows 离线完整包**：在 [Releases](https://github.com/Crazylobster96/pillow_assistant/releases) 下载 `PillowAssistant-windows-x64-*.zip`，解压后双击 `PillowAssistant.exe` 即可，已内置 Python 和全部依赖，联网时自动按 GitHub 最新代码升级。详见 [packaging/windows/README.md](packaging/windows/README.md)。
 
@@ -49,6 +49,7 @@ python -m pillow_assistant
 | 语音转文字（推荐，中文效果好） | `pip install funasr torch torchaudio`（SenseVoice） |
 | 语音转文字（轻量回退） | `pip install faster-whisper` |
 | 视频切分/压缩/抽帧 | 系统安装 ffmpeg，或 `pip install imageio-ffmpeg` |
+| 文本生成 CAD（text-to-cad） | `pip install uv`（首次使用自动下载 cadgen 运行时） |
 | PDF / Excel / Word / PPT 预览 | `pymupdf` / `openpyxl` / `python-docx` + `mammoth` / `python-pptx` |
 | 浏览器取网页工具 | `pip install playwright && playwright install chromium` |
 
@@ -98,6 +99,14 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 #### 视频
 
 拖入视频即可播放预览。视频对话示例：「这个视频太大了，帮我处理成模型能接受的输入」——Agent 会自动探测时长/大小，再按需切片段（`split`）、压缩到目标大小（`compress`）或均匀抽帧成图片（`frames`，给只收图片的视觉模型）。产物落在项目 workspace。
+
+#### 文本生成 CAD（text-to-cad）
+
+集成了 [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)：直接说「做一个 40×20×6 的安装支架，中间开 8mm 孔，导出 STEP 和 STL」「给这个零件出一张工程图」「把它切成拓竹 X1C 能打的 G-code」。Agent 会应用对应的 CAD 技能（`cad` / `dxf` / `engineering-drawing` / `dfm` / `dfam-check` / `gcode` / `step-parts` / `urdf` / `srdf` / `sdf` / `bambu-labs` / `sendcutsend`），在项目 workspace 写 build123d 参数化模型脚本，再用 `text_to_cad` 工具在固定版本的 cadgen 运行时里生成 STEP / STL / 3MF / GLB / DXF / PDF 等产物（每次执行前会请你确认）。
+
+- 运行时通过 [uv](https://docs.astral.sh/uv/) 获取（`pip install ".[cad]"` 即可，Windows 离线包已内置并预装好 cadgen，可离线建模）；cadgen 的遥测默认关闭。
+- **自动跟随上游升级**：`.github/workflows/sync-text-to-cad.yml` 每天检查 text-to-cad 的 `latest` 分支（只收已发布到 PyPI 的正式版），有新版就把技能同步到 `pillow_assistant/capabilities/skills/text_to_cad/`、更新 cadgen 版本锁定、跑测试与 cadgen 冒烟测试后推送到 main；Windows 包的自动升级随之拿到新技能，新版 cadgen 在首次使用时下载。也可手动执行 `python scripts/sync_text_to_cad.py`。
+- 想覆盖某个 CAD 技能，在 `~/.pillow/skills/<同名>/SKILL.md` 放自己的版本即可。
 
 #### 让 Agent 配置自己
 
@@ -193,6 +202,7 @@ Optional extras (everything degrades gracefully when missing):
 | Speech-to-text (recommended) | `pip install funasr torch torchaudio` (SenseVoice) |
 | Speech-to-text (light fallback) | `pip install faster-whisper` |
 | Video split / compress / frame extraction | system ffmpeg, or `pip install imageio-ffmpeg` |
+| Text-to-CAD (text-to-cad) | `pip install uv` (the cadgen runtime downloads on first use) |
 | PDF / Excel / Word / PPT previews | `pymupdf` / `openpyxl` / `python-docx` + `mammoth` / `python-pptx` |
 | Browser page-reading tool | `pip install playwright && playwright install chromium` |
 
@@ -242,6 +252,14 @@ Just say "show these two files side by side" — the Agent calls `present_window
 #### Video
 
 Dropped videos play right in the panel. Try: "this video is too big for the model — make it fit". The Agent probes duration/size, then splits into segments, compresses to a target size, or extracts evenly spaced frames for image-only vision models. Outputs land in the project workspace.
+
+#### Text-to-CAD (text-to-cad)
+
+Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad): ask "make a 40×20×6 mounting bracket with an 8 mm hole, export STEP and STL", "make an engineering drawing of this part", or "slice it to G-code for a Bambu X1C". The Agent applies the matching CAD skill (`cad`, `dxf`, `engineering-drawing`, `dfm`, `dfam-check`, `gcode`, `step-parts`, `urdf`, `srdf`, `sdf`, `bambu-labs`, `sendcutsend`), writes a build123d parametric model script in the project workspace, and runs it with the `text_to_cad` tool in the pinned cadgen runtime to produce STEP / STL / 3MF / GLB / DXF / PDF outputs (each run asks for confirmation).
+
+- The runtime comes through [uv](https://docs.astral.sh/uv/) (`pip install ".[cad]"`; the Windows offline bundle ships uv with cadgen prewarmed, so modelling works offline). cadgen telemetry is turned off.
+- **Follows upstream automatically**: `.github/workflows/sync-text-to-cad.yml` checks text-to-cad's `latest` branch daily (releases only, once on PyPI), vendors the skills into `pillow_assistant/capabilities/skills/text_to_cad/`, bumps the cadgen pin, runs the tests plus a cadgen smoke test and pushes to main; the Windows auto-updater then picks it up and the new cadgen downloads on first use. Run `python scripts/sync_text_to_cad.py` to sync by hand.
+- To override a CAD skill, put your own `~/.pillow/skills/<same-name>/SKILL.md`.
 
 #### Let the Agent configure itself
 

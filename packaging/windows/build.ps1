@@ -7,6 +7,7 @@
     python\         relocatable CPython (NuGet "python" package) + every dependency
     app\            the committed source tree + VERSION.json
     ms-playwright\  Chromium for the browser tool
+    cad-runtime\    uv cache with the pinned text-to-cad cadgen runtime (CAD works offline)
     launcher.pyw, update.json, PillowAssistant.exe, PillowAssistant-console.bat
   Optionally copies a prefetched models\ folder (see prefetch_models.py).
 
@@ -20,6 +21,7 @@ param(
     [string]$Version = "",
     [string]$ModelsDir = "",
     [switch]$SkipBrowser,
+    [switch]$SkipCad,
     [switch]$SkipZip,
     [switch]$SkipSelfTest
 )
@@ -80,6 +82,22 @@ if (-not $SkipBrowser) {
     $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $Bundle "ms-playwright"
     & $Py -E -s -m playwright install --only-shell chromium
     if ($LASTEXITCODE -ne 0) { Run $Py @("-E", "-s", "-m", "playwright", "install", "chromium") }
+}
+
+# 3b. text-to-cad: prewarm the cadgen runtime that the vendored Skills pin, in the
+#     same folders the launcher points uv at, so CAD modelling works offline. uv
+#     rebuilds the cached environment on its own if the bundle is moved.
+if (-not $SkipCad) {
+    Step "text-to-cad runtime (cadgen)"
+    $Upstream = Get-Content -Raw -Encoding UTF8 (Join-Path $Repo "pillow_assistant\capabilities\skills\text_to_cad\UPSTREAM.json") | ConvertFrom-Json
+    $Cad = Join-Path $Bundle "cad-runtime"
+    $env:UV_CACHE_DIR = Join-Path $Cad "cache"
+    $env:UV_PYTHON_INSTALL_DIR = Join-Path $Cad "python"
+    $env:UV_TOOL_DIR = Join-Path $Cad "tools"
+    $env:DO_NOT_TRACK = "1"
+    $Uvx = Join-Path $Bundle "python\Scripts\uvx.exe"
+    Run $Uvx (@($Upstream.uvx_args) + @("python", "-c", "import build123d, cadgen; print('cadgen ok')"))
+    Remove-Item Env:UV_CACHE_DIR, Env:UV_PYTHON_INSTALL_DIR, Env:UV_TOOL_DIR, Env:DO_NOT_TRACK
 }
 
 # 4. Application source: exactly the committed tree, like the updater downloads.

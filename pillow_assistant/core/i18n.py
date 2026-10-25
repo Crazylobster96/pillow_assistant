@@ -251,6 +251,20 @@ _ZH = {
     "tool.skill.not_found": "未找到技能：{name}",
     "tool.skill.applied": "【技能 {name}】\n{instructions}",
     "tool.skill.merged": "（已合并嵌套子技能：{names}）",
+    "tool.skill.text_to_cad": "（本技能来自 text-to-cad {version}，在枕头里这样执行：文中的 `cadgen …` 用 text_to_cad 工具，"
+                              "program=\"cadgen\"、args=[…]；`python <脚本> …` 用 program=\"python\"，模型脚本放在工作目录；"
+                              "技能自带的 scripts/… 与 requirements.txt 用 skill=\"{name}\" 让工具自动定位并安装依赖；"
+                              "references/… 等技能文件用 cad_reference 工具读取，路径形如 \"{name}/references/x.md\"。"
+                              "生成的 STEP/STL/GLB 等文件落在工作目录。不要调用 CAD Viewer / MCP 相关的步骤，"
+                              "需要给用户看结果时汇报产物路径或用 present_windows 展示渲染图。）",
+    "tool.cad.no_uv": "未找到 uv（text-to-cad 通过 uv 运行 CAD 内核）：请 pip install uv，或按 https://docs.astral.sh/uv/ 安装。",
+    "tool.cad.bad_args": "args 必须是字符串数组。",
+    "tool.cad.bad_program": "program 只能是 cadgen 或 python。",
+    "tool.cad.unknown_skill": "未找到 text-to-cad 技能：{name}",
+    "tool.cad.outputs": "新生成/更新的文件：{files}",
+    "tool.cadref.denied": "只能读取 text-to-cad 技能目录内的文件：{path}",
+    "tool.cadref.not_found": "未找到文件：{path}",
+    "tool.cadref.status": "text-to-cad {version}（cadgen {cadgen}，上游 {repo}@{commit}）\nuv：{uv}\n技能目录：{root}\n技能：\n{skills}",
     "skill.nest_extends": "—— 继承自技能「{name}」 ——",
     "skill.nest_includes": "—— 引入技能「{name}」 ——",
     "skill.nest_cycle": "（检测到循环引用，已跳过技能「{name}」）",
@@ -598,6 +612,21 @@ _EN = {
     "tool.skill.not_found": "Skill not found: {name}",
     "tool.skill.applied": "[Skill {name}]\n{instructions}",
     "tool.skill.merged": "(merged nested sub-skills: {names})",
+    "tool.skill.text_to_cad": "(This skill comes from text-to-cad {version}. In Pillow: run `cadgen …` with the "
+                              "text_to_cad tool, program=\"cadgen\", args=[…]; run `python <script> …` with "
+                              "program=\"python\", keeping model scripts in the workspace; pass skill=\"{name}\" so the "
+                              "skill's own scripts/… and requirements.txt are located and installed automatically; read "
+                              "references/… and other skill files with the cad_reference tool, path like "
+                              "\"{name}/references/x.md\". STEP/STL/GLB outputs land in the workspace. Skip CAD Viewer / "
+                              "MCP steps; to show results, report the output paths or present rendered images with present_windows.)",
+    "tool.cad.no_uv": "uv not found (text-to-cad runs its CAD kernel through uv): pip install uv, or see https://docs.astral.sh/uv/.",
+    "tool.cad.bad_args": "args must be an array of strings.",
+    "tool.cad.bad_program": "program must be cadgen or python.",
+    "tool.cad.unknown_skill": "No such text-to-cad skill: {name}",
+    "tool.cad.outputs": "New or updated files: {files}",
+    "tool.cadref.denied": "Only files inside the text-to-cad skills folder can be read: {path}",
+    "tool.cadref.not_found": "File not found: {path}",
+    "tool.cadref.status": "text-to-cad {version} (cadgen {cadgen}, upstream {repo}@{commit})\nuv: {uv}\nSkills folder: {root}\nSkills:\n{skills}",
     "skill.nest_extends": "—— inherited from skill \"{name}\" ——",
     "skill.nest_includes": "—— includes skill \"{name}\" ——",
     "skill.nest_cycle": "(circular reference detected; skipped skill \"{name}\")",

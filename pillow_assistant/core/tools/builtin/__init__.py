@@ -9,6 +9,7 @@ from pillow_assistant.core.tools.registry import ToolRegistry
 def build_default_registry() -> ToolRegistry:
     from pillow_assistant.core.tools.builtin.ask_tool import AskUserTool
     from pillow_assistant.core.tools.builtin.browser_tool import BrowserReadTool
+    from pillow_assistant.core.tools.builtin.cad_tool import CadReferenceTool, TextToCadTool
     from pillow_assistant.core.tools.builtin.cli_tool import RunCliTool
     from pillow_assistant.core.tools.builtin.config_tools import (
         AssignModelRoleTool,
@@ -48,6 +49,8 @@ def build_default_registry() -> ToolRegistry:
     register(SetSurfaceTransparencyTool())
     register(AskUserTool())
     register(ProcessVideoTool())
+    register(TextToCadTool())
+    register(CadReferenceTool())
     register(RequestProjectMemoryTool())
     register(DeleteProjectTool())
     return reg

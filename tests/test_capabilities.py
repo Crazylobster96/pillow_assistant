@@ -49,13 +49,13 @@ def test_prompt_catalog_is_file_backed_versioned_and_strict():
 def test_tool_manifests_bind_metadata_and_filter_modes():
     manifests = ToolManifestRegistry(language="zh")
     registry = build_default_registry()
-    assert len(manifests.names()) == 19
-    assert len(registry.names()) == 18
+    assert len(manifests.names()) == 21
+    assert len(registry.names()) == 20
     assert manifests.get("apply_skill").permission == "readonly"
     assert "request_project_memory" not in registry.names("chat")
     assert "request_project_memory" in registry.names("project")
-    assert len(registry.schemas("chat")) == 17
-    assert len(registry.schemas("project")) == 18
+    assert len(registry.schemas("chat")) == 19
+    assert len(registry.schemas("project")) == 20
     assert PythonTool.description
     assert PythonTool.parameters["required"] == ["code"]
     snapshot = registry.snapshot("project")

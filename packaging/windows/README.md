@@ -15,6 +15,8 @@ PillowAssistant/
                                imageio-ffmpeg、mcp ……）
   app/                         程序源码 + VERSION.json（当前版本的 commit）
   ms-playwright/               浏览器工具用的 Chromium
+  cad-runtime/                 text-to-cad 的 cadgen 运行时（uv 缓存 + Python 3.13），可离线建模；
+                               上游升级后新版本在首次使用时自动下载到这里（build.ps1 -SkipCad 可不预装）
   models/                      （可选）离线语音模型，来自 PillowAssistant-models.zip
 ```
 

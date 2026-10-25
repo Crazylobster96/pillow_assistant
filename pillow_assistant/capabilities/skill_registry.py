@@ -1,4 +1,4 @@
-"""Discover built-in, user, and project Skill files with explicit precedence."""
+"""Discover built-in, vendored, user, and project Skill files with explicit precedence."""
 
 from __future__ import annotations
 
@@ -6,27 +6,34 @@ from importlib import resources
 from pathlib import Path
 from typing import Iterable, Optional
 
+from pillow_assistant.capabilities import text_to_cad
 from pillow_assistant.capabilities.skill_loader import Skill, SkillStore, resolve_skill, resolve_skill_tools
 
 
 class CapabilitySkillRegistry:
-    """Load skills in increasing precedence: built-in, user, then project."""
+    """Load skills in increasing precedence: built-in, vendored text-to-cad, user, then project."""
 
     def __init__(
         self,
         *,
         built_in_root: Optional[str | Path] = None,
+        text_to_cad_root: Optional[str | Path] = None,
         user_root: Optional[str | Path] = None,
         project_root: Optional[str | Path] = None,
     ) -> None:
         default_builtin = resources.files("pillow_assistant.capabilities").joinpath("skills", "builtin")
         self.built_in_root = Path(built_in_root) if built_in_root is not None else default_builtin
+        self.text_to_cad_root = Path(text_to_cad_root) if text_to_cad_root is not None else text_to_cad.skills_root()
         self.user_root = Path(user_root) if user_root is not None else Path.home() / ".pillow" / "skills"
         self.project_root = Path(project_root) if project_root is not None else None
         self._skills: list[Skill] = []
 
     def _sources(self) -> list[tuple[str, object]]:
-        result: list[tuple[str, object]] = [("builtin", self.built_in_root), ("user", self.user_root)]
+        result: list[tuple[str, object]] = [
+            ("builtin", self.built_in_root),
+            (text_to_cad.SOURCE_KIND, self.text_to_cad_root),
+            ("user", self.user_root),
+        ]
         if self.project_root is not None:
             result.append(("project", self.project_root))
         return result

@@ -1,0 +1,71 @@
+{
+  "name": "text_to_cad",
+  "version": "1.0.0",
+  "description": {
+    "zh": "文本生成 CAD（text-to-cad / cadgen）：在当前工作目录用固定版本的 cadgen 运行时执行 `cadgen …` 或 `python 模型脚本`，生成/检查 STEP、STL、3MF、GLB、DXF、工程图、URDF 等。先用 apply_skill 应用 cad / dxf / engineering-drawing / urdf 等 text-to-cad 技能，按其指引编写模型脚本再用本工具运行。经用户确认后执行；首次运行需联网下载运行时。",
+    "en": "Text-to-CAD (text-to-cad / cadgen): run `cadgen …` or `python <model script>` in the pinned cadgen runtime inside the workspace to generate and check STEP, STL, 3MF, GLB, DXF, engineering drawings, URDF and more. Apply a text-to-cad skill first (cad, dxf, engineering-drawing, urdf, …) with apply_skill, write the model script as it instructs, then run it here. Runs after user confirmation; the first run needs network access to download the runtime."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "program": {
+          "type": "string",
+          "enum": [
+            "cadgen",
+            "python"
+          ],
+          "description": "cadgen：运行 cadgen 子命令（技能里的 `cadgen …`）；python：在 cadgen 环境里运行 Python 脚本（技能里的 `python <脚本> …`，如生成模型的 src/part.py）"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "program 之后的参数，如 [\"src/bracket.py\"] 或 [\"doctor\"]；路径相对工作目录"
+        },
+        "skill": {
+          "type": "string",
+          "description": "可选：所用 text-to-cad 技能名（如 dfm）。技能自带的 scripts/… 路径会自动定位，并安装其 requirements.txt"
+        }
+      },
+      "required": [
+        "program",
+        "args"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "program": {
+          "type": "string",
+          "enum": [
+            "cadgen",
+            "python"
+          ],
+          "description": "cadgen: run a cadgen subcommand (the skills' `cadgen …`); python: run a Python script inside the cadgen environment (the skills' `python <script> …`, e.g. a model's src/part.py)"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "arguments after the program, e.g. [\"src/bracket.py\"] or [\"doctor\"]; paths are workspace-relative"
+        },
+        "skill": {
+          "type": "string",
+          "description": "optional: the text-to-cad skill in use (e.g. dfm); its own scripts/… paths are resolved and its requirements.txt installed"
+        }
+      },
+      "required": [
+        "program",
+        "args"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

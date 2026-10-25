@@ -1,0 +1,33 @@
+{
+  "name": "cad_reference",
+  "version": "1.0.0",
+  "description": {
+    "zh": "读取 text-to-cad 技能自带的文件（references/*.md 参考文档、scripts 等），路径形如 \"cad/references/step-generation.md\"；给目录则列出内容；不给 path 则返回 text-to-cad 版本、cadgen 运行时是否可用及技能列表。",
+    "en": "Read files shipped with the text-to-cad skills (references/*.md, scripts, …), path like \"cad/references/step-generation.md\"; a folder lists its contents; no path returns the text-to-cad version, whether the cadgen runtime is available, and the skill list."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "技能目录内的相对路径，如 cad/references/positioning.md；留空返回状态"
+        }
+      }
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "path inside the skills folder, e.g. cad/references/positioning.md; empty returns status"
+        }
+      }
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

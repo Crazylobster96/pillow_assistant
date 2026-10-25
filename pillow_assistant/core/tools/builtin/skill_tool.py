@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from pillow_assistant.capabilities import text_to_cad
 from pillow_assistant.capabilities.prompt_registry import render_prompt
 from pillow_assistant.capabilities.tool_manifest import get_tool_manifest_registry
 from pillow_assistant.core.i18n import t
@@ -39,5 +42,10 @@ class SkillTool:
         children = getattr(skill, "children", None)
         if children:
             instructions = t("tool.skill.merged", names="、".join(children)) + "\n\n" + instructions
+        if getattr(skill, "source_kind", "") == text_to_cad.SOURCE_KIND:
+            # Upstream text is kept verbatim; tell the model how its commands map onto Pillow's tools.
+            note = t("tool.skill.text_to_cad", version=text_to_cad.upstream_info().get("version", "?"),
+                     name=Path(skill.source).parent.name if skill.source else skill.name)
+            instructions = note + "\n\n" + instructions
         return ToolResult(ok=True, text=t("tool.skill.applied", name=skill.name,
                                           instructions=instructions))

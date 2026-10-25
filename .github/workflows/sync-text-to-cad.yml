@@ -1,0 +1,91 @@
+name: Sync text-to-cad
+
+# Follows https://github.com/earthtojake/text-to-cad: its `latest` branch gets each
+# release once the matching cadgen is on PyPI. A new release is vendored into
+# pillow_assistant/capabilities/skills/text_to_cad/, tested, and pushed to main,
+# where the Windows bundle's updater and `pip install` users pick it up.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Upstream branch or tag to sync (default: latest)"
+        type: string
+        default: "latest"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-text-to-cad
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync from upstream
+        id: sync
+        run: python scripts/sync_text_to_cad.py --ref "${{ inputs.ref || 'latest' }}"
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if [ -n "$(git status --porcelain -- pillow_assistant/capabilities/skills/text_to_cad)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "text-to-cad is already at ${{ steps.sync.outputs.version }}"
+          fi
+
+      - name: Test
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pip install pytest pydantic litellm keyring numpy PySide6 uv
+          python -m pytest -q tests/test_text_to_cad.py tests/test_capabilities.py
+
+      - name: Smoke-test the pinned cadgen runtime
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          DO_NOT_TRACK: "1"
+        run: |
+          args=$(python -c "import json;print(' '.join(json.load(open('pillow_assistant/capabilities/skills/text_to_cad/UPSTREAM.json'))['uvx_args']))")
+          uvx $args python -c "import build123d, cadgen; print('cadgen ok')"
+
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.sync.outputs.version }}
+          PREVIOUS: ${{ steps.sync.outputs.previous }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pillow_assistant/capabilities/skills/text_to_cad
+          git commit -m "Sync text-to-cad ${PREVIOUS:-none} -> ${VERSION}" \
+                     -m "Vendored from https://github.com/earthtojake/text-to-cad/tree/${{ inputs.ref || 'latest' }} by scripts/sync_text_to_cad.py."
+          if git push origin HEAD:main; then
+            echo "Pushed text-to-cad ${VERSION} to main"
+          else
+            # main is protected: hand the update over as a pull request instead.
+            branch="bot/text-to-cad-${VERSION}"
+            git push --force origin "HEAD:refs/heads/${branch}"
+            gh pr create --base main --head "$branch" \
+              --title "Sync text-to-cad ${VERSION}" \
+              --body "Automated sync of earthtojake/text-to-cad ${PREVIOUS:-none} -> ${VERSION}. Tests and the cadgen smoke test passed." \
+              || echo "PR already exists"
+          fi

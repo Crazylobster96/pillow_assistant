@@ -47,12 +47,14 @@ video = ["imageio-ffmpeg>=0.4"]
 browser = ["playwright>=1.40"]
 # Mount external MCP servers' tools.
 mcp = ["mcp>=1.0"]
+# Text-to-CAD (earthtojake/text-to-cad): uv fetches the pinned cadgen runtime on first use.
+cad = ["uv>=0.5"]
 # Everything at once.
 all = [
     "pandas>=2.0", "matplotlib>=3.7", "sounddevice>=0.4.6",
     "funasr>=1.1", "torch>=2.0", "torchaudio>=2.0", "faster-whisper>=1.0",
     "pymupdf>=1.23", "openpyxl>=3.1", "python-docx>=1.1", "python-pptx>=0.6", "mammoth>=1.6",
-    "imageio-ffmpeg>=0.4", "playwright>=1.40", "mcp>=1.0",
+    "imageio-ffmpeg>=0.4", "playwright>=1.40", "mcp>=1.0", "uv>=0.5",
 ]
 
 [project.urls]
@@ -85,4 +87,5 @@ packages = [
     "tools/*/manifest.json",
     "skills/builtin/*.txt",
     "skills/builtin/*/SKILL.md",
+    "skills/text_to_cad/**/*",
 ]

@@ -516,6 +516,12 @@ def setup_environment(paths: Paths) -> None:
         env.setdefault("PILLOW_MODELS_DIR", str(models))
         env.setdefault("MODELSCOPE_CACHE", str(models / "modelscope"))
         env.setdefault("HF_HOME", str(models / "huggingface"))
+    # text-to-cad: uv keeps cadgen and its managed Python inside the bundle, so a
+    # prewarmed bundle (build.ps1) models offline and the folder stays portable.
+    cad = root / "cad-runtime"
+    env.setdefault("UV_CACHE_DIR", str(cad / "cache"))
+    env.setdefault("UV_PYTHON_INSTALL_DIR", str(cad / "python"))
+    env.setdefault("UV_TOOL_DIR", str(cad / "tools"))
     # Offline-friendly defaults: never block start-up on remote lookups.
     env.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     env.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

@@ -27,3 +27,5 @@ mcp>=1.0
 imageio-ffmpeg>=0.4
 # T3 — optional, headless browser tool for JS-rendered pages (run `playwright install chromium`)
 playwright>=1.40
+# text-to-cad — uv runs the pinned cadgen CAD runtime (build123d/OpenCASCADE) in its own Python
+uv>=0.5
