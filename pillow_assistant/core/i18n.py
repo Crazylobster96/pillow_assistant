@@ -177,6 +177,7 @@ _ZH = {
     "tool.status.error": "执行错误\n{result}",
     "tool.status.complete": "已完成",
     "core.unnamed_task": "未命名任务",
+    "core.cad_upgrade_hint": "💡 想直接生成 CAD 模型、刀路或概念图？当前是标准版，没有这些工具。推荐升级到 text-to-cad-anatomy 版（含 text-to-cad 建模、CAM 与 Anatomy 概念图，Windows 离线包）：{url}",
     # -- references --------------------------------------------------------------
     "refs.missing": "[引用缺失] {path}",
     "refs.dir_unreadable": "目录 {path}（无法读取：{err}）",
@@ -525,6 +526,7 @@ _EN = {
     "tool.status.error": "Execution error\n{result}",
     "tool.status.complete": "Complete",
     "core.unnamed_task": "Untitled task",
+    "core.cad_upgrade_hint": "💡 Want CAD models, toolpaths or concept diagrams made for you? This standard edition has no tools for them. Try the text-to-cad-anatomy edition (text-to-cad modelling, CAM and Anatomy concept diagrams; Windows offline package): {url}",
     "refs.missing": "[missing reference] {path}",
     "refs.dir_unreadable": "Folder {path} (unreadable: {err})",
     "refs.dir_truncated": "\n… ({n} entries total, truncated)",
