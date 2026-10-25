@@ -1,0 +1,95 @@
+{
+  "name": "text_to_cam",
+  "version": "1.0.0",
+  "description": {
+    "zh": "文本生成 CAM：把 text-to-cad 的产物变成机床程序。目前支持 cut2d：DXF → 激光/等离子切割 G-code（GRBL、LinuxCNC、Fanuc），带切缝补偿、先内后外排序、引入线、行程检查和预览 SVG。先用 apply_skill 应用 cam 技能。只在工作目录写文件，从不连接机床。",
+    "en": "Text-to-CAM: turn text-to-cad output into machine programs. Currently cut2d: DXF to laser/plasma cutting G-code (GRBL, LinuxCNC, Fanuc) with kerf compensation, inside-out ordering, lead-ins, bed check and a preview SVG. Apply the cam skill first with apply_skill. Only writes files in the workspace and never connects to a machine."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "cut2d"
+          ],
+          "description": "cut2d：把工作目录里的 DXF 轮廓转成激光/等离子切割 G-code（切缝补偿、先内后外、引入线），同时生成预览 SVG。铣削（mill）后续加入"
+        },
+        "input": {
+          "type": "string",
+          "description": "工作目录内的 .dxf 文件（ASCII DXF，单位取 $INSUNITS）"
+        },
+        "output": {
+          "type": "string",
+          "description": "输出 G-code 路径，默认与输入同名 .nc；预览写在旁边的 .preview.svg"
+        },
+        "machine": {
+          "type": "object",
+          "description": "机床配置：字段：controller(grbl/linuxcnc/fanuc/generic)、process(laser/plasma)、bed [x,y] mm、max_power（激光 S 最大值，默认 1000）、laser_mode(dynamic=M4/constant=M3)、z_axis、safe_height/pierce_height/cut_height、torch_on/torch_off（自定义 M 代码，如 QtPlasmaC 的 \"M3 $0 S1\"）、rapid、name"
+        },
+        "machine_file": {
+          "type": "string",
+          "description": "工作目录内的 JSON 文件，内容同 machine（已保存的机床配置）"
+        },
+        "job": {
+          "type": "object",
+          "description": "本次材料/工艺参数（覆盖 machine 同名字段）：kerf 切缝宽 mm、feed 进给 mm/min、power 激光功率 S、pierce_delay 穿孔延时 s、lead_in 引入线长 mm、overcut 过切 mm、origin(drawing/lower_left)、layers 只切这些图层、engrave_layers 沿线雕刻不补偿的图层、engrave_power、engrave_feed、tolerance 曲线拟合精度 mm。feed/kerf/power/pierce_delay 必须来自用户，不得猜测"
+        },
+        "job_file": {
+          "type": "string",
+          "description": "工作目录内的 JSON 文件，内容同 job"
+        }
+      },
+      "required": [
+        "action",
+        "input"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "cut2d"
+          ],
+          "description": "cut2d: turn DXF profiles in the workspace into laser/plasma cutting G-code (kerf compensation, inside-out order, lead-ins) plus a preview SVG. Milling (mill) comes later"
+        },
+        "input": {
+          "type": "string",
+          "description": "a .dxf file in the workspace (ASCII DXF; units from $INSUNITS)"
+        },
+        "output": {
+          "type": "string",
+          "description": "G-code output path, default the input name with .nc; the preview goes next to it as .preview.svg"
+        },
+        "machine": {
+          "type": "object",
+          "description": "machine profile: Fields: controller (grbl/linuxcnc/fanuc/generic), process (laser/plasma), bed [x,y] mm, max_power (laser S maximum, default 1000), laser_mode (dynamic=M4/constant=M3), z_axis, safe_height/pierce_height/cut_height, torch_on/torch_off (custom M-code, e.g. QtPlasmaC \"M3 $0 S1\"), rapid, name"
+        },
+        "machine_file": {
+          "type": "string",
+          "description": "a JSON file in the workspace holding the machine object (a saved machine profile)"
+        },
+        "job": {
+          "type": "object",
+          "description": "material/process settings for this job (override machine fields of the same name): kerf mm, feed mm/min, power laser S, pierce_delay s, lead_in mm, overcut mm, origin (drawing/lower_left), layers to cut only these layers, engrave_layers cut on the line without compensation, engrave_power, engrave_feed, tolerance curve fit mm. feed/kerf/power/pierce_delay must come from the user, never guessed"
+        },
+        "job_file": {
+          "type": "string",
+          "description": "a JSON file in the workspace holding the job object"
+        }
+      },
+      "required": [
+        "action",
+        "input"
+      ]
+    }
+  },
+  "permission": "write_ws",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

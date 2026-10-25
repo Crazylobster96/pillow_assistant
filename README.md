@@ -110,6 +110,7 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 - **自动跟随上游升级**：`.github/workflows/sync-text-to-cad.yml` 每天检查 text-to-cad 的 `latest` 分支（只收已发布到 PyPI 的正式版），有新版就把技能同步到 `pillow_assistant/capabilities/skills/text_to_cad/`、更新 cadgen 版本锁定、跑测试与 cadgen 冒烟测试后推送到 main；Windows 包的自动升级随之拿到新技能，新版 cadgen 在首次使用时下载。也可手动执行 `python scripts/sync_text_to_cad.py`。
 - **新版有问题可回滚**：Windows 包的新版本在试用期内启动失败会自动退回上一版，也可 `PillowAssistant-console.bat --rollback` 手动回滚，回滚过的版本不会再被自动装回；要让所有人退回某个旧的 text-to-cad，在仓库 Actions 变量里设 `TEXT_TO_CAD_REF=v0.7.25`（旧标签）并运行同步工作流，删掉变量即恢复跟随最新版。
 - 切片和发打印用到的外部应用由 `cad_app` 工具在首次使用时自动安装：OrcaSlicer、Bambu Studio 从官方 GitHub Release 下载免安装版到 `cad-runtime\apps`（非离线包为 `~/.pillow/cad-apps`）；Bambu Connect 是拓竹闭源软件，会打开官方下载页让你自己安装。
+- **CAM（激光 / 等离子切割）**：说「把这个零件的轮廓出成 GRBL 激光切割的 G-code」，Agent 应用内置的 `cam` 技能，先问清机床和材料参数（进给、功率、穿孔延时、切缝不会替你猜），再用 `text_to_cam` 工具把 DXF 转成 GRBL / LinuxCNC / Fanuc 代码：切缝补偿、先切内孔再切外轮廓、废料侧引入线、行程检查，并生成预览 SVG。它只写文件，不连接机床。铣削（FreeCAD CAM）和 3+2 定轴后续加入。
 - 想覆盖某个 CAD 技能，在 `~/.pillow/skills/<同名>/SKILL.md` 放自己的版本即可。
 
 #### 让 Agent 配置自己
@@ -267,6 +268,7 @@ Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-ca
 - **Follows upstream automatically**: `.github/workflows/sync-text-to-cad.yml` checks text-to-cad's `latest` branch daily (releases only, once on PyPI), vendors the skills into `pillow_assistant/capabilities/skills/text_to_cad/`, bumps the cadgen pin, runs the tests plus a cadgen smoke test and pushes to main; the Windows auto-updater then picks it up and the new cadgen downloads on first use. Run `python scripts/sync_text_to_cad.py` to sync by hand.
 - **Rollback**: a new Windows-bundle version that fails to start during its probation is rolled back automatically, `PillowAssistant-console.bat --rollback` does it by hand, and a rolled-back version is never auto-installed again. To pin everyone to an older text-to-cad, set the Actions variable `TEXT_TO_CAD_REF` to an old tag (e.g. `v0.7.25`) and run the sync workflow; delete it to follow the latest release again.
 - External apps are installed on first use by the `cad_app` tool: OrcaSlicer and Bambu Studio portable builds from their official GitHub releases go to `cad-runtime/apps` (or `~/.pillow/cad-apps`); Bambu Connect is closed source, so its official download page is opened for you.
+- **CAM (laser / plasma cutting)**: ask "turn this part's outline into GRBL laser G-code". The Agent applies the built-in `cam` skill, asks for the machine and material settings (it never guesses feed, power, pierce delay or kerf), and runs the `text_to_cam` tool to turn the DXF into GRBL / LinuxCNC / Fanuc code with kerf compensation, holes before outlines, scrap-side lead-ins, a bed check and a preview SVG. It only writes files and never connects to a machine. Milling (FreeCAD CAM) and 3+2 indexed work come later.
 - To override a CAD skill, put your own `~/.pillow/skills/<same-name>/SKILL.md`.
 
 #### Let the Agent configure itself

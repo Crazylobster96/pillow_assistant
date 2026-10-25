@@ -10,6 +10,7 @@ def build_default_registry() -> ToolRegistry:
     from pillow_assistant.core.tools.builtin.ask_tool import AskUserTool
     from pillow_assistant.core.tools.builtin.browser_tool import BrowserReadTool
     from pillow_assistant.core.tools.builtin.cad_tool import CadAppTool, CadReferenceTool, TextToCadTool
+    from pillow_assistant.core.tools.builtin.cam_tool import TextToCamTool
     from pillow_assistant.core.tools.builtin.cli_tool import RunCliTool
     from pillow_assistant.core.tools.builtin.config_tools import (
         AssignModelRoleTool,
@@ -52,6 +53,7 @@ def build_default_registry() -> ToolRegistry:
     register(TextToCadTool())
     register(CadReferenceTool())
     register(CadAppTool())
+    register(TextToCamTool())
     register(RequestProjectMemoryTool())
     register(DeleteProjectTool())
     return reg
