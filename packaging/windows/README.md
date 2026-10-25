@@ -31,7 +31,11 @@ PillowAssistant/
 
 - 启动约 20 秒后在后台检查 GitHub，此后运行期间每 6 小时检查一次；离线时静默跳过，不影响使用。
 - 发现新版本就下载源码并暂存到 `updates\staged`，**下次启动时**自动替换 `app\`。如果新代码的 `requirements.txt` 有变化，会先用内置 pip 安装新依赖，安装失败则继续使用旧版本，下次再试。
-- 旧版本保留在 `updates\previous`，可用 `PillowAssistant-console.bat --rollback` 回退。
+- **出问题可回滚**：旧版本保留在 `updates\previous`。
+  - 自动回滚：新版本处于「试用期」，直到正常运行满 60 秒或正常退出。期间如果启动报错，会立刻恢复上一版并重新打开；如果连续两次启动都没撑过试用期（比如闪退），第三次启动时自动恢复上一版。
+  - 手动回滚：`PillowAssistant-console.bat --rollback`。
+  - 回滚过的版本会被记住（`updates\state.json` 的 `skipped_shas`），自动升级不会再把它装回来；等仓库里出现更新的提交（修复版）才继续升级。想重新允许安装它：`--clear-skipped`。
+  - text-to-cad 的技能和 cadgen 版本锁定都在 `app\` 里，所以回滚 app 也会一起退回旧的 text-to-cad，旧版 cadgen 仍在 `cad-runtime\` 缓存中，离线也能用。
 - 立即检查并升级：`PillowAssistant-console.bat --update-now`；查看当前版本：`--version`；本次不升级：`--no-update`。
 - 日志：`%USERPROFILE%\.pillow\logs\launcher.log`（启动器/升级）、`app-output.log`（程序输出）。
 

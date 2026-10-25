@@ -234,3 +234,69 @@ def test_shortcut_failure_is_not_recorded(bundle):
 
 def test_no_shortcuts_outside_a_bundle(bundle):
     assert launcher.create_shortcuts(bundle, run=lambda *a: ["x"]) == []
+
+
+def _update_to_new(bundle):
+    launcher.stage_update(bundle, _cfg(), download=lambda u, t: _zipball(NEW))
+    assert launcher.apply_staged(bundle, install=lambda p, r: True)
+    assert json.loads(bundle.probation.read_text())["sha"] == NEW
+
+
+def test_manual_rollback_skips_bad_version_until_a_newer_commit(bundle, github):
+    _update_to_new(bundle)
+    assert launcher.rollback(bundle)
+    assert launcher.current_version(bundle)["sha"] == OLD
+    assert (bundle.app / "data" / "logs" / "llm.jsonl").is_file()  # runtime data comes back
+    assert not bundle.probation.exists()
+    assert launcher.skipped_shas(bundle) == [NEW]
+
+    def boom(url, t):
+        raise AssertionError("must not download a rolled-back version")
+
+    assert launcher.stage_update(bundle, _cfg(), download=boom) is None
+    github["sha"] = "c" * 40  # a fix lands upstream
+    assert launcher.stage_update(bundle, _cfg(), download=lambda u, t: _zipball("c" * 40))["sha"] == "c" * 40
+
+    launcher.clear_skipped(bundle)
+    assert launcher.skipped_shas(bundle) == []
+
+
+def test_crash_on_probation_rolls_back_and_relaunches(bundle, github):
+    _update_to_new(bundle)
+    assert launcher.begin_probation_start(bundle)
+    relaunched = []
+
+    def broken_app():
+        raise ImportError("new version is broken")
+
+    with pytest.raises(ImportError):
+        launcher.run_app(bundle, broken_app, True, relaunch=lambda: relaunched.append(1))
+    assert launcher.current_version(bundle)["sha"] == OLD
+    assert relaunched == [1]
+    assert json.loads(bundle.state.read_text())["last_rollback"]["sha"] == NEW
+
+
+def test_clean_exit_on_probation_keeps_new_version(bundle, github):
+    _update_to_new(bundle)
+    assert launcher.begin_probation_start(bundle)
+    assert launcher.run_app(bundle, lambda: 0, True) == 0
+    assert not bundle.probation.exists()
+    assert launcher.current_version(bundle)["sha"] == NEW
+    assert not launcher.begin_probation_start(bundle)
+
+
+def test_repeated_hard_crashes_roll_back_on_next_start(bundle, github):
+    _update_to_new(bundle)
+    for _ in range(launcher.MAX_UNHEALTHY_STARTS):
+        assert launcher.begin_probation_start(bundle)  # process dies before becoming healthy
+    assert not launcher.begin_probation_start(bundle)
+    assert launcher.current_version(bundle)["sha"] == OLD
+    assert launcher.skipped_shas(bundle) == [NEW]
+
+
+def test_crash_outside_probation_does_not_roll_back(bundle, github):
+    _update_to_new(bundle)
+    launcher.mark_healthy(bundle)
+    with pytest.raises(RuntimeError):
+        launcher.run_app(bundle, lambda: (_ for _ in ()).throw(RuntimeError("bug")), False)
+    assert launcher.current_version(bundle)["sha"] == NEW

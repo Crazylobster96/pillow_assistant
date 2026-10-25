@@ -30,6 +30,12 @@ Update flow (never touches files that are in use):
    source archive and stages it.  It is applied on the next launch.
 3. Offline, every network step fails fast and silently; the app always
    starts with what is installed.
+4. A freshly applied version is on probation (``updates/probation.json``)
+   until it has run for ``HEALTHY_SECONDS`` or exited cleanly.  If it raises
+   during start-up, or two starts in a row never become healthy (hard
+   crash), ``updates/previous`` is restored automatically.  A rolled-back
+   commit, automatic or ``--rollback``, is remembered in ``state.json`` and
+   never staged again; the next newer commit updates as usual.
 """
 
 from __future__ import annotations
@@ -70,6 +76,10 @@ DEFAULT_CONFIG = {
     # the bundle folder is moved). A shortcut the user deleted stays deleted.
     "desktop_shortcut": True,
 }
+
+HEALTHY_SECONDS = 60      # a new version that has run this long is kept
+MAX_UNHEALTHY_STARTS = 2  # starts that never became healthy before auto-rollback
+MAX_SKIPPED = 20
 
 USER_AGENT = "PillowAssistant-Updater"
 API = "https://api.github.com"
@@ -130,6 +140,7 @@ class Paths:
         self.staged_marker = self.updates / "staged.json"
         self.previous = self.updates / "previous"
         self.state = self.updates / "state.json"
+        self.probation = self.updates / "probation.json"
         self.lock = self.updates / ".lock"
         self.config = root / "update.json"
         self.version = self.app / "VERSION.json"
@@ -266,6 +277,9 @@ def stage_update(paths: Paths, cfg: dict,
     if remote is None or not is_newer(cfg, local_sha, remote["sha"]):
         log.info("up to date (%s)", local_sha[:10] or "unknown")
         return None
+    if remote["sha"] in skipped_shas(paths):
+        log.info("skipping %s: it was rolled back; waiting for a newer commit", remote["sha"][:10])
+        return None
     if staged.get("sha") == remote["sha"] and paths.staged.is_dir():
         log.info("update %s already staged", remote["sha"][:10])
         return staged
@@ -368,19 +382,123 @@ def apply_staged(paths: Paths,
             log.warning("could not refresh launcher", exc_info=True)
 
     paths.staged_marker.unlink(missing_ok=True)
+    previous_sha = _read_json(paths.previous / "VERSION.json").get("sha", "")
+    _write_json(paths.probation, {"sha": meta.get("sha", ""), "previous_sha": previous_sha,
+                                  "applied_at": _now(), "starts": 0})
     log.info("updated to %s", str(meta.get("sha", ""))[:10])
     return True
 
 
-def rollback(paths: Paths) -> bool:
-    """Restore ``updates/previous`` (used by ``--rollback``)."""
+def skipped_shas(paths: Paths) -> list:
+    return list(_read_json(paths.state).get("skipped_shas") or [])
+
+
+def rollback(paths: Paths, reason: str = "manual") -> bool:
+    """Restore ``updates/previous`` and never auto-install the rolled-back commit again."""
     if not (paths.previous / "pillow_assistant").is_dir():
         return False
+    bad_sha = current_version(paths).get("sha", "")
     broken = paths.updates / f"rolled-back-{uuid.uuid4().hex[:8]}"
     os.replace(paths.app, broken)
     os.replace(paths.previous, paths.app)
+    # Runtime data that older versions keep inside app/ moves back with it.
+    if (broken / "data").is_dir() and not (paths.app / "data").exists():
+        try:
+            shutil.move(str(broken / "data"), str(paths.app / "data"))
+        except OSError:
+            log.warning("could not carry back %s", broken / "data", exc_info=True)
     _rmtree(broken)
+    paths.probation.unlink(missing_ok=True)
+    # A staged copy of the same bad commit must not come straight back.
+    if bad_sha and _read_json(paths.staged_marker).get("sha") == bad_sha:
+        paths.staged_marker.unlink(missing_ok=True)
+        _rmtree(paths.staged)
+    state = _read_json(paths.state)
+    if bad_sha:
+        skipped = [s for s in (state.get("skipped_shas") or []) if s != bad_sha] + [bad_sha]
+        state["skipped_shas"] = skipped[-MAX_SKIPPED:]
+    state["last_rollback"] = {"sha": bad_sha, "to": current_version(paths).get("sha", ""),
+                              "reason": reason, "at": _now()}
+    try:
+        _write_json(paths.state, state)
+    except OSError:
+        log.warning("could not record rollback", exc_info=True)
+    log.warning("rolled back %s -> %s (%s)", bad_sha[:10],
+                str(current_version(paths).get("sha", ""))[:10], reason)
     return True
+
+
+def clear_skipped(paths: Paths) -> None:
+    state = _read_json(paths.state)
+    state.pop("skipped_shas", None)
+    _write_json(paths.state, state)
+
+
+# -- probation: keep a new version only once it has proven it starts ---------
+def begin_probation_start(paths: Paths) -> bool:
+    """Count this start against a freshly applied version.
+
+    Returns True while the current version is still on probation.  Rolls back
+    (and returns False) when earlier starts never became healthy.
+    """
+    probe = _read_json(paths.probation)
+    if not probe:
+        return False
+    if probe.get("sha") != current_version(paths).get("sha"):
+        paths.probation.unlink(missing_ok=True)  # stale marker (manual swap, rollback, ...)
+        return False
+    if int(probe.get("starts", 0)) >= MAX_UNHEALTHY_STARTS:
+        rollback(paths, reason=f"{probe['starts']} starts never became healthy")
+        return False
+    probe["starts"] = int(probe.get("starts", 0)) + 1
+    _write_json(paths.probation, probe)
+    return True
+
+
+def mark_healthy(paths: Paths) -> None:
+    probe = _read_json(paths.probation)
+    if probe and probe.get("sha") == current_version(paths).get("sha"):
+        paths.probation.unlink(missing_ok=True)
+        log.info("version %s is healthy", str(probe.get("sha", ""))[:10])
+
+
+def run_app(paths: Paths, app_main: Callable[[], Optional[int]], on_probation: bool,
+            relaunch: Optional[Callable[[], None]] = None) -> Optional[int]:
+    """Run the app; a new version that crashes while on probation is rolled back."""
+    timer = None
+    if on_probation:
+        timer = threading.Timer(HEALTHY_SECONDS, mark_healthy, args=(paths,))
+        timer.daemon = True
+        timer.start()
+    try:
+        code = app_main()
+    except BaseException as exc:
+        if on_probation and not isinstance(exc, KeyboardInterrupt) and paths.probation.exists():
+            log.exception("new version failed while on probation")
+            try:
+                rolled = rollback(paths, reason=f"start-up error: {exc!r}"[:300])
+            except OSError:
+                log.exception("rollback failed; it will be retried on the next start")
+                rolled = False
+            if rolled and relaunch is not None:
+                relaunch()
+        raise
+    finally:
+        if timer is not None:
+            timer.cancel()
+    if on_probation and code in (0, None):
+        mark_healthy(paths)
+    return code
+
+
+def _relaunch_previous() -> None:
+    """Start the (now rolled-back) app again in a fresh process."""
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    try:
+        subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw"), *sys.argv[1:]],
+                         creationflags=flags, close_fds=True)
+    except OSError:
+        log.warning("could not relaunch after rollback", exc_info=True)
 
 
 def cleanup(paths: Paths) -> None:
@@ -614,7 +732,10 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--no-update", action="store_true", help="skip all update steps")
     parser.add_argument("--update-now", action="store_true",
                         help="check GitHub, download and apply an update, then exit")
-    parser.add_argument("--rollback", action="store_true", help="restore the previous version")
+    parser.add_argument("--rollback", action="store_true",
+                        help="restore the previous version and stop auto-updating to the current one")
+    parser.add_argument("--clear-skipped", action="store_true",
+                        help="forget rolled-back versions so they may be installed again")
     parser.add_argument("--version", action="store_true", help="print the installed version")
     parser.add_argument("--create-shortcuts", action="store_true",
                         help="(re)create the desktop and Start menu shortcuts, then exit")
@@ -632,7 +753,8 @@ def main(argv: Optional[list] = None) -> int:
         return 0
 
     log_dir = Path.home() / ".pillow" / "logs"
-    interactive = args.update_now or args.rollback or args.self_test or args.create_shortcuts
+    interactive = (args.update_now or args.rollback or args.clear_skipped or args.self_test
+                   or args.create_shortcuts)
     setup_logging(log_dir, console=interactive and sys.stdout is not None)
     setup_environment(paths)
     cfg = load_config(paths)
@@ -645,9 +767,17 @@ def main(argv: Optional[list] = None) -> int:
         return 0 if links else 1
 
     if args.rollback:
-        ok = rollback(paths)
-        print("rolled back" if ok else "no previous version to roll back to")
+        with UpdateLock(paths) as locked:
+            ok = locked and rollback(paths)
+        print(json.dumps(current_version(paths), ensure_ascii=False, indent=2))
+        print("rolled back; the bad version will not be installed again"
+              if ok else "no previous version to roll back to")
         return 0 if ok else 1
+
+    if args.clear_skipped:
+        clear_skipped(paths)
+        print("rolled-back versions forgotten")
+        return 0
 
     if args.update_now:
         cfg["enabled"] = True
@@ -667,22 +797,32 @@ def main(argv: Optional[list] = None) -> int:
         return self_test(paths)
 
     redirect_stdio(log_dir)
-    if cfg.get("enabled", True) and not _other_instance_running():
+    on_probation = False
+    if not _other_instance_running():
         with UpdateLock(paths) as locked:
             if locked:
-                cleanup(paths)
+                if cfg.get("enabled", True):
+                    cleanup(paths)
+                    try:
+                        apply_staged(paths)
+                    except Exception:  # noqa: BLE001 - never block start-up
+                        log.exception("applying update failed")
                 try:
-                    apply_staged(paths)
-                except Exception:  # noqa: BLE001 - never block start-up
-                    log.exception("applying update failed")
+                    on_probation = begin_probation_start(paths)
+                except Exception:  # noqa: BLE001
+                    log.exception("probation check failed")
     start_background_checker(paths, cfg)
     if os.name == "nt" and cfg.get("desktop_shortcut", True):
         threading.Thread(target=create_shortcuts, args=(paths,), name="pillow-shortcuts",
                          daemon=True).start()
 
     sys.argv = [sys.argv[0]] + app_args
-    from pillow_assistant.app import main as app_main
-    return app_main()
+
+    def app_main():
+        from pillow_assistant.app import main
+        return main()
+
+    return run_app(paths, app_main, on_probation, relaunch=_relaunch_previous)
 
 
 if __name__ == "__main__":

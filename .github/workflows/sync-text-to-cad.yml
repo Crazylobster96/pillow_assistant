@@ -4,6 +4,11 @@ name: Sync text-to-cad
 # release once the matching cadgen is on PyPI. A new release is vendored into
 # pillow_assistant/capabilities/skills/text_to_cad/, tested, and pushed to main,
 # where the Windows bundle's updater and `pip install` users pick it up.
+#
+# Rolling back a bad upstream release for everyone: set the repository variable
+# TEXT_TO_CAD_REF to an older tag (Settings > Secrets and variables > Actions >
+# Variables, e.g. v0.7.25) and run this workflow. It vendors that tag, pushes it
+# to main, and daily runs stay on it. Delete the variable to follow `latest` again.
 
 on:
   schedule:
@@ -11,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Upstream branch or tag to sync (default: latest)"
+        description: "Upstream branch or tag to sync (empty: TEXT_TO_CAD_REF variable, else latest)"
         type: string
-        default: "latest"
+        default: ""
 
 permissions:
   contents: write
@@ -27,6 +32,8 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      REF: ${{ inputs.ref || vars.TEXT_TO_CAD_REF || 'latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +45,7 @@ jobs:
 
       - name: Sync from upstream
         id: sync
-        run: python scripts/sync_text_to_cad.py --ref "${{ inputs.ref || 'latest' }}"
+        run: python scripts/sync_text_to_cad.py --ref "$REF"
 
       - name: Detect changes
         id: diff
@@ -77,7 +84,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pillow_assistant/capabilities/skills/text_to_cad
           git commit -m "Sync text-to-cad ${PREVIOUS:-none} -> ${VERSION}" \
-                     -m "Vendored from https://github.com/earthtojake/text-to-cad/tree/${{ inputs.ref || 'latest' }} by scripts/sync_text_to_cad.py."
+                     -m "Vendored from https://github.com/earthtojake/text-to-cad/tree/${REF} by scripts/sync_text_to_cad.py."
           if git push origin HEAD:main; then
             echo "Pushed text-to-cad ${VERSION} to main"
           else

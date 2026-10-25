@@ -106,6 +106,7 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 
 - 运行时通过 [uv](https://docs.astral.sh/uv/) 获取（`pip install ".[cad]"` 即可，Windows 离线包已内置并预装好 cadgen，可离线建模）；cadgen 的遥测默认关闭。
 - **自动跟随上游升级**：`.github/workflows/sync-text-to-cad.yml` 每天检查 text-to-cad 的 `latest` 分支（只收已发布到 PyPI 的正式版），有新版就把技能同步到 `pillow_assistant/capabilities/skills/text_to_cad/`、更新 cadgen 版本锁定、跑测试与 cadgen 冒烟测试后推送到 main；Windows 包的自动升级随之拿到新技能，新版 cadgen 在首次使用时下载。也可手动执行 `python scripts/sync_text_to_cad.py`。
+- **新版有问题可回滚**：Windows 包的新版本在试用期内启动失败会自动退回上一版，也可 `PillowAssistant-console.bat --rollback` 手动回滚，回滚过的版本不会再被自动装回；要让所有人退回某个旧的 text-to-cad，在仓库 Actions 变量里设 `TEXT_TO_CAD_REF=v0.7.25`（旧标签）并运行同步工作流，删掉变量即恢复跟随最新版。
 - 想覆盖某个 CAD 技能，在 `~/.pillow/skills/<同名>/SKILL.md` 放自己的版本即可。
 
 #### 让 Agent 配置自己
@@ -259,6 +260,7 @@ Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-ca
 
 - The runtime comes through [uv](https://docs.astral.sh/uv/) (`pip install ".[cad]"`; the Windows offline bundle ships uv with cadgen prewarmed, so modelling works offline). cadgen telemetry is turned off.
 - **Follows upstream automatically**: `.github/workflows/sync-text-to-cad.yml` checks text-to-cad's `latest` branch daily (releases only, once on PyPI), vendors the skills into `pillow_assistant/capabilities/skills/text_to_cad/`, bumps the cadgen pin, runs the tests plus a cadgen smoke test and pushes to main; the Windows auto-updater then picks it up and the new cadgen downloads on first use. Run `python scripts/sync_text_to_cad.py` to sync by hand.
+- **Rollback**: a new Windows-bundle version that fails to start during its probation is rolled back automatically, `PillowAssistant-console.bat --rollback` does it by hand, and a rolled-back version is never auto-installed again. To pin everyone to an older text-to-cad, set the Actions variable `TEXT_TO_CAD_REF` to an old tag (e.g. `v0.7.25`) and run the sync workflow; delete it to follow the latest release again.
 - To override a CAD skill, put your own `~/.pillow/skills/<same-name>/SKILL.md`.
 
 #### Let the Agent configure itself
