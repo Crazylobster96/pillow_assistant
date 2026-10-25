@@ -215,14 +215,18 @@ def release_asset(spec: AppSpec, plat: str, get_json: Callable[[str], dict]) -> 
     if not pattern:
         raise CadAppError(f"no automatic {spec.title} install for {plat}")
     releases = get_json(f"https://api.github.com/repos/{spec.repo}/releases?per_page=15")
-    for rel in releases if isinstance(releases, list) else []:
+    releases = releases if isinstance(releases, list) else []
+    for rel in releases:
         if rel.get("draft") or rel.get("prerelease"):
             continue
         for asset in rel.get("assets") or []:
             if re.match(pattern, asset.get("name", "")):
                 return {"tag": rel.get("tag_name", ""), "name": asset["name"],
                         "url": asset["browser_download_url"], "digest": asset.get("digest") or ""}
-    raise CadAppError(f"no {spec.title} release asset matches {pattern}")
+    newest = next((r for r in releases if not r.get("draft") and not r.get("prerelease")), {})
+    names = ", ".join(a.get("name", "") for a in newest.get("assets") or [])
+    raise CadAppError(f"no {spec.title} release asset matches {pattern}"
+                      + (f" (newest {newest.get('tag_name', '')} has: {names})" if names else ""))
 
 
 def pinned_asset(key: str, plat: str) -> Optional[dict]:
@@ -376,7 +380,10 @@ def pin(plat: str, keys=None, get_json: Optional[Callable[[str], dict]] = None) 
     for key in keys or [k for k, a in APPS.items() if a.repo]:
         spec = APPS[key]
         if (spec.asset_patterns or {}).get(plat):
-            out[key] = {plat: release_asset(spec, plat, get_json)}
+            try:
+                out[key] = {plat: release_asset(spec, plat, get_json)}
+            except CadAppError as exc:  # one app's release naming changed: still pin the others
+                print(f"warning: {exc}", file=sys.stderr)
     return out
 
 
