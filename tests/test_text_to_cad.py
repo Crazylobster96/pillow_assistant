@@ -168,3 +168,104 @@ def test_real_cadgen_builds_step(tmp_path):
                                          ToolContext(workspace=tmp_path)))
     assert result.ok, result.text
     assert "STEP/plate.step" in result.artifacts
+
+
+def _fake_releases(name):
+    return [{"tag_name": "v9.0.0-beta", "prerelease": True, "assets": [{"name": name, "browser_download_url": "x"}]},
+            {"tag_name": "v8.1.0", "prerelease": False,
+             "assets": [{"name": "notes.txt", "browser_download_url": "n"},
+                        {"name": name, "browser_download_url": "https://example.invalid/" + name}]}]
+
+
+def test_cad_app_installs_portable_orcaslicer_on_first_use(monkeypatch, tmp_path):
+    import io
+    import zipfile
+
+    from pillow_assistant.capabilities import cad_apps
+
+    monkeypatch.setenv("PILLOW_CAD_APPS_DIR", str(tmp_path / "apps"))
+    monkeypatch.setattr(cad_apps.shutil, "which", lambda name: None)
+    monkeypatch.setattr(cad_apps.sys, "platform", "win32")
+    monkeypatch.setattr(cad_apps, "platform_key", lambda: "windows-x64")
+    for var in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA", "PILLOW_ORCASLICER"):
+        monkeypatch.delenv(var, raising=False)
+    asset = "OrcaSlicer_Windows_V8.1.0_x64_portable.zip"
+    assert cad_apps.locate("orcaslicer") is None
+
+    def download(url, dest):
+        assert url.endswith(asset)  # skips the pre-release
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("OrcaSlicer/orca-slicer.exe", "exe")
+            zf.writestr("OrcaSlicer/resources/profiles/BBL.json", "{}")
+        dest.write_bytes(buf.getvalue())
+
+    result = cad_apps.install("orcaslicer", get_json=lambda url: _fake_releases(asset), download=download)
+    assert result["version"] == "v8.1.0" and result["path"].endswith("orca-slicer.exe")
+    app = cad_apps.locate("orcaslicer")
+    assert app is not None and cad_apps.installed_version("orcaslicer") == "v8.1.0"
+    assert cad_apps.profiles_dir("orcaslicer", app).name == "profiles"
+
+
+def test_cad_app_rejects_unsafe_archives(monkeypatch, tmp_path):
+    import io
+    import zipfile
+
+    from pillow_assistant.capabilities import cad_apps
+
+    monkeypatch.setenv("PILLOW_CAD_APPS_DIR", str(tmp_path / "apps"))
+    monkeypatch.setattr(cad_apps, "platform_key", lambda: "windows-x64")
+    asset = "Bambu_Studio_win_v8.zip"
+
+    def download(url, dest):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("../../evil.exe", "x")
+        dest.write_bytes(buf.getvalue())
+
+    with pytest.raises(cad_apps.CadAppError):
+        cad_apps.install("bambu-studio", get_json=lambda url: _fake_releases(asset), download=download)
+    assert not (tmp_path / "evil.exe").exists()
+
+
+def test_bambu_connect_opens_official_page(monkeypatch):
+    from pillow_assistant.capabilities import cad_apps
+
+    opened = []
+    assert cad_apps.install("bambu-connect", open_page=opened.append) == {"opened": cad_apps.APPS["bambu-connect"].download_page}
+    assert opened and opened[0].startswith("https://bambulab.com/")
+
+
+def test_cad_app_tool_run_and_open(monkeypatch, tmp_path):
+    import subprocess
+
+    from pillow_assistant.capabilities import cad_apps
+    from pillow_assistant.core.tools.builtin import cad_tool
+    from pillow_assistant.core.tools.builtin.cad_tool import CadAppTool
+
+    exe = tmp_path / "orca-slicer"
+    exe.write_text("", "utf-8")
+    monkeypatch.setattr(cad_apps, "locate", lambda key: exe)
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        (tmp_path / "plate_1.gcode").write_text("G28", "utf-8")
+        return subprocess.CompletedProcess(cmd, 0, "sliced", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    ctx = ToolContext(workspace=tmp_path)
+    tool = CadAppTool()
+    r = asyncio.run(tool({"app": "orcaslicer", "action": "run", "args": ["model.stl", "--slice", "0"]}, ctx))
+    assert r.ok and seen["cmd"] == [str(exe), "model.stl", "--slice", "0"] and r.artifacts == ["plate_1.gcode"]
+    assert asyncio.run(tool({"app": "orcaslicer", "action": "ensure"}, ctx)).ok
+
+    launched = []
+    monkeypatch.setattr(cad_tool, "_launch", lambda cmd, target: launched.append((cmd, target)))
+    (tmp_path / "part.stl").write_text("solid", "utf-8")
+    assert asyncio.run(tool({"app": "orcaslicer", "action": "open", "target": "part.stl"}, ctx)).ok
+    link = "bambu-connect://import-file?path=%2Fx.gcode.3mf&name=x&version=1.0.0"
+    assert asyncio.run(tool({"app": "bambu-connect", "action": "open", "target": link}, ctx)).ok
+    assert launched[1] == (None, link)
+    assert not asyncio.run(tool({"app": "orcaslicer", "action": "open", "target": "/etc/passwd"}, ctx)).ok
+    assert not asyncio.run(tool({"app": "photoshop", "action": "ensure"}, ctx)).ok

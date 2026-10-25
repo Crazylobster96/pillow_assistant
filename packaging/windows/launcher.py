@@ -640,6 +640,7 @@ def setup_environment(paths: Paths) -> None:
     env.setdefault("UV_CACHE_DIR", str(cad / "cache"))
     env.setdefault("UV_PYTHON_INSTALL_DIR", str(cad / "python"))
     env.setdefault("UV_TOOL_DIR", str(cad / "tools"))
+    env.setdefault("PILLOW_CAD_APPS_DIR", str(cad / "apps"))  # OrcaSlicer etc., installed on first use
     # Offline-friendly defaults: never block start-up on remote lookups.
     env.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     env.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

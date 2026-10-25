@@ -256,12 +256,25 @@ _ZH = {
                               "技能自带的 scripts/… 与 requirements.txt 用 skill=\"{name}\" 让工具自动定位并安装依赖；"
                               "references/… 等技能文件用 cad_reference 工具读取，路径形如 \"{name}/references/x.md\"。"
                               "生成的 STEP/STL/GLB 等文件落在工作目录。不要调用 CAD Viewer / MCP 相关的步骤，"
-                              "需要给用户看结果时汇报产物路径或用 present_windows 展示渲染图。）",
+                              "需要给用户看结果时汇报产物路径或用 present_windows 展示渲染图。"
+                              "技能需要 OrcaSlicer / Bambu Studio / Bambu Connect 时先调用 cad_app（action=\"ensure\"，未安装会自动下载安装），"
+                              "文中的 `<orca> …` 用 cad_app action=\"run\"，`Start-Process <文件或 bambu-connect:// 链接>` 用 action=\"open\"。）",
     "tool.cad.no_uv": "未找到 uv（text-to-cad 通过 uv 运行 CAD 内核）：请 pip install uv，或按 https://docs.astral.sh/uv/ 安装。",
     "tool.cad.bad_args": "args 必须是字符串数组。",
     "tool.cad.bad_program": "program 只能是 cadgen 或 python。",
     "tool.cad.unknown_skill": "未找到 text-to-cad 技能：{name}",
     "tool.cad.outputs": "新生成/更新的文件：{files}",
+    "tool.cadapp.unknown": "未知应用：{name}（可选：{apps}）",
+    "tool.cadapp.bad_action": "action 只能是 ensure / run / open。",
+    "tool.cadapp.missing": "{app} 尚未安装：先用 action=\"ensure\" 自动安装。",
+    "tool.cadapp.install_failed": "自动安装 {app} 失败：{err}。可手动从 {page} 安装后重试。",
+    "tool.cadapp.manual": "{app} 不能自动安装，已在浏览器打开官方下载页 {page}；请用户装好并登录后再继续。",
+    "tool.cadapp.ready": "{app} 已就绪：{path}（版本 {version}）。用 action=\"run\" 跑它的命令行，action=\"open\" 用它打开文件。",
+    "tool.cadapp.profiles": "OrcaSlicer 预置配置目录：{path}（orca_presets.py 加 --profiles 这个路径）",
+    "tool.cadapp.opened": "已用 {app} 打开：{target}",
+    "tool.cadapp.open_failed": "无法用 {app} 打开：{err}",
+    "tool.cadapp.not_installed": "未安装（首次使用时用 cad_app 自动安装）",
+    "tool.cadapp.status": "外部应用：\n{apps}",
     "tool.cadref.denied": "只能读取 text-to-cad 技能目录内的文件：{path}",
     "tool.cadref.not_found": "未找到文件：{path}",
     "tool.cadref.status": "text-to-cad {version}（cadgen {cadgen}，上游 {repo}@{commit}）\nuv：{uv}\n技能目录：{root}\n技能：\n{skills}",
@@ -618,12 +631,26 @@ _EN = {
                               "skill's own scripts/… and requirements.txt are located and installed automatically; read "
                               "references/… and other skill files with the cad_reference tool, path like "
                               "\"{name}/references/x.md\". STEP/STL/GLB outputs land in the workspace. Skip CAD Viewer / "
-                              "MCP steps; to show results, report the output paths or present rendered images with present_windows.)",
+                              "MCP steps; to show results, report the output paths or present rendered images with present_windows. When the skill needs OrcaSlicer, "
+                              "Bambu Studio or Bambu Connect, call cad_app with action=\"ensure\" first (it installs missing "
+                              "apps automatically); run `<orca> …` with cad_app action=\"run\", and `Start-Process <file or "
+                              "bambu-connect:// link>` with action=\"open\".)",
     "tool.cad.no_uv": "uv not found (text-to-cad runs its CAD kernel through uv): pip install uv, or see https://docs.astral.sh/uv/.",
     "tool.cad.bad_args": "args must be an array of strings.",
     "tool.cad.bad_program": "program must be cadgen or python.",
     "tool.cad.unknown_skill": "No such text-to-cad skill: {name}",
     "tool.cad.outputs": "New or updated files: {files}",
+    "tool.cadapp.unknown": "Unknown app: {name} (choose from: {apps})",
+    "tool.cadapp.bad_action": "action must be ensure, run or open.",
+    "tool.cadapp.missing": "{app} is not installed yet: call action=\"ensure\" to install it automatically.",
+    "tool.cadapp.install_failed": "Installing {app} automatically failed: {err}. Install it from {page} and retry.",
+    "tool.cadapp.manual": "{app} cannot be installed automatically; its official download page {page} was opened in the browser. Ask the user to install it (and sign in), then continue.",
+    "tool.cadapp.ready": "{app} is ready: {path} (version {version}). Use action=\"run\" for its command line, action=\"open\" to open a file in it.",
+    "tool.cadapp.profiles": "OrcaSlicer presets folder: {path} (pass it to orca_presets.py with --profiles)",
+    "tool.cadapp.opened": "Opened in {app}: {target}",
+    "tool.cadapp.open_failed": "Could not open it in {app}: {err}",
+    "tool.cadapp.not_installed": "not installed (cad_app installs it on first use)",
+    "tool.cadapp.status": "Apps:\n{apps}",
     "tool.cadref.denied": "Only files inside the text-to-cad skills folder can be read: {path}",
     "tool.cadref.not_found": "File not found: {path}",
     "tool.cadref.status": "text-to-cad {version} (cadgen {cadgen}, upstream {repo}@{commit})\nuv: {uv}\nSkills folder: {root}\nSkills:\n{skills}",

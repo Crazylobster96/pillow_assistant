@@ -1,0 +1,91 @@
+{
+  "name": "cad_app",
+  "version": "1.0.0",
+  "description": {
+    "zh": "text-to-cad 的 gcode / bambu-labs 技能用到的外部应用（OrcaSlicer 切片、Bambu Studio、Bambu Connect 发打印）：首次使用时自动下载安装，之后运行其命令行或用它打开文件。经用户确认后执行。",
+    "en": "External apps used by the text-to-cad gcode / bambu-labs skills (OrcaSlicer slicing, Bambu Studio, Bambu Connect printing): installed automatically on first use, then run their command line or open files in them. Runs after user confirmation."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "enum": [
+            "orcaslicer",
+            "bambu-studio",
+            "bambu-connect"
+          ],
+          "description": "应用"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "ensure",
+            "run",
+            "open"
+          ],
+          "description": "ensure：找到应用，未安装则自动下载安装（Bambu Connect 打开官方下载页）；run：运行它的命令行（如 OrcaSlicer 无头切片）；open：用它打开工作目录里的文件，或打开 bambu-connect:// 链接"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "run：命令行参数（--outputdir 用绝对路径）"
+        },
+        "target": {
+          "type": "string",
+          "description": "open：工作目录内的文件路径，或 bambu-connect://import-file?… 链接"
+        }
+      },
+      "required": [
+        "app",
+        "action"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "enum": [
+            "orcaslicer",
+            "bambu-studio",
+            "bambu-connect"
+          ],
+          "description": "the app"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "ensure",
+            "run",
+            "open"
+          ],
+          "description": "ensure: locate the app, installing it automatically if missing (Bambu Connect opens its official download page); run: run its command line (e.g. headless OrcaSlicer slicing); open: open a workspace file in it, or a bambu-connect:// link"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "run: command-line arguments (give --outputdir an absolute path)"
+        },
+        "target": {
+          "type": "string",
+          "description": "open: a workspace file path, or a bambu-connect://import-file?… link"
+        }
+      },
+      "required": [
+        "app",
+        "action"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}
