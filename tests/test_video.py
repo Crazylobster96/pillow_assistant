@@ -44,7 +44,10 @@ def sample_video(tmp_path):
     out = tmp_path / "in.mp4"
     subprocess.run(
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=duration=12:size=320x240:rate=10",
-         "-c:v", "libx264", "-preset", "ultrafast", str(out)],
+         "-c:v", "libx264", "-preset", "ultrafast",
+         # A keyframe every second: split stream-copies, so it can only cut on
+         # keyframes, and x264's default interval (250 frames) is longer than the clip.
+         "-g", "10", str(out)],
         capture_output=True, timeout=120, check=True,
     )
     return out

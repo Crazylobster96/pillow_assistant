@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 from pillow_assistant.contracts import EventType, SurfaceLevel
+from pillow_assistant.core import i18n
 from pillow_assistant.core.tools.base import ToolContext
 from pillow_assistant.core.tools.builtin.present_tool import PresentTool
 
@@ -28,7 +29,8 @@ def test_text_items_row(tmp_path):
     assert ev.request_id == "req1"
 
 
-def test_path_item_and_missing_path_skipped(tmp_path):
+def test_path_item_and_missing_path_skipped(tmp_path, monkeypatch):
+    monkeypatch.setattr(i18n, "LANG", "zh")  # the assertion checks the zh text
     events = []
     t = PresentTool()
     p = tmp_path / "x.txt"
