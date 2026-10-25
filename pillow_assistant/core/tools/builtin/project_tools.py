@@ -127,3 +127,42 @@ class InheritProjectTool:
         shown = ", ".join(copied[:40]) + (f" … (+{len(copied) - 40})" if len(copied) > 40 else "")
         return ToolResult(ok=True, text=t("tool.inhproj.done", name=source.name, n=len(copied), files=shown or "-"),
                           artifacts=copied[:40])
+
+
+@manifest_tool
+class ProjectLineageTool:
+    name = "project_lineage"
+    permission = Permission.READONLY
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        from pillow_assistant.core import project_lineage as lineage
+
+        store = getattr(ctx, "project_store", None)
+        if store is None:
+            return ToolResult(ok=False, text=t("tool.delproj.no_store"))
+        query = (args.get("project") or "").strip()
+        focus = None
+        if query.lower() not in ("all", "全部"):
+            if query:
+                project = store.get(query)
+                if project is None:
+                    matches = store.find_by_name(query)
+                    if not matches:
+                        return ToolResult(ok=False, text=t("tool.delproj.not_found", name=query))
+                    if len(matches) > 1:
+                        listing = "\n".join(f"- {p.name} (id={p.id})" for p in matches)
+                        return ToolResult(ok=False, text=t("tool.delproj.ambiguous", name=query, listing=listing))
+                    project = matches[0]
+            else:
+                project = store.get(getattr(getattr(ctx, "session", None), "project_id", None))
+            focus = project.id if project is not None else None
+        graph = lineage.component(lineage.build_graph(store), focus)
+        text = lineage.render_text(graph, focus)
+        if args.get("open"):
+            import webbrowser
+
+            page = store.base / "lineage.html"
+            page.write_text(lineage.render_html(graph, focus), "utf-8")
+            webbrowser.open(page.as_uri())
+            text += "\n" + t("tool.lineage.opened", path=page)
+        return ToolResult(ok=True, text=text)

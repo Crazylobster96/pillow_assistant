@@ -1,0 +1,41 @@
+{
+  "name": "project_lineage",
+  "version": "1.0.0",
+  "description": {
+    "zh": "查看项目血缘关系：哪个项目继承了哪个项目的成果（复制了多少文件），以树状文本返回；open=true 时同时在浏览器中打开血缘关系图。不填 project 看当前项目所在的血缘，填 \"all\" 看全部。",
+    "en": "Show project lineage: which project built on which (and how many files were copied), as a text tree; with open=true also opens the lineage graph in the browser. Without project it shows the current project's lineage; \"all\" shows everything."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "项目名称或 id；留空 = 当前项目，\"all\" = 全部"
+        },
+        "open": {
+          "type": "boolean",
+          "description": "是否在浏览器中打开血缘关系图"
+        }
+      }
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "project name or id; empty = the current project, \"all\" = every project"
+        },
+        "open": {
+          "type": "boolean",
+          "description": "also open the lineage graph in the browser"
+        }
+      }
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

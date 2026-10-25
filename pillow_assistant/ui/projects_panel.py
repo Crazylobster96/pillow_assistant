@@ -73,6 +73,72 @@ class _ConfirmDialog(QDialog):
         lay.addLayout(row)
         cancel.setFocus()
 
+class _LineageDialog(QDialog):
+    """The lineage graph of one project (or all linked projects) as SVG,
+    with a button to open the same page in the browser."""
+
+    def __init__(self, store, focus: Optional[str], parent=None) -> None:
+        super().__init__(parent)
+        from pillow_assistant.core import project_lineage as lineage
+
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint)
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowTitle(t("lineage.title"))
+        self.setStyleSheet("QDialog { background: #F7F9FC; } QLabel, QPlainTextEdit { color: #18202A; }")
+        self._store = store
+        self._graph = lineage.component(lineage.build_graph(store), focus)
+        self._focus = focus
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 12, 14, 12)
+        svg = lineage.render_svg(self._graph, focus) if self._graph["edges"] else ""
+        view = None
+        if svg:
+            try:
+                from PySide6.QtCore import QByteArray
+                from PySide6.QtSvgWidgets import QSvgWidget
+                from PySide6.QtWidgets import QScrollArea
+
+                widget = QSvgWidget()
+                widget.load(QByteArray(svg.encode("utf-8")))
+                size = widget.renderer().defaultSize()
+                widget.setFixedSize(size)
+                self._content = size
+                view = QScrollArea(self)
+                view.setWidget(widget)
+                view.setStyleSheet("QScrollArea { border: none; background: #F7F9FC; }")
+            except Exception:
+                view = None
+        if view is None:  # no edges, or no Qt SVG module: the text tree
+            view = QPlainTextEdit(lineage.render_text(self._graph, focus), self)
+            view.setReadOnly(True)
+        lay.addWidget(view, 1)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        if self._graph["edges"]:
+            browser = QPushButton(t("lineage.open_browser"), self)
+            browser.clicked.connect(self._open_browser)
+            row.addWidget(browser)
+        close = QPushButton(t("lineage.close"), self)
+        close.clicked.connect(self.accept)
+        row.addWidget(close)
+        lay.addLayout(row)
+        content = getattr(self, "_content", None)
+        if content is not None:  # fit the graph, within reason
+            self.resize(min(content.width() + 52, 1200), min(content.height() + 90, 760))
+        else:
+            self.resize(640, 360)
+
+    def _open_browser(self) -> None:
+        from pillow_assistant.core import project_lineage as lineage
+
+        page = Path(self._store.base) / "lineage.html"
+        try:
+            page.write_text(lineage.render_html(self._graph, self._focus), "utf-8")
+        except OSError:
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(page)))
+
+
 def panel_qss(opacity: int) -> str:
     alpha = round(opacity * 2.55)
     control_alpha = 0 if alpha == 0 else min(255, alpha + 18)
@@ -182,6 +248,9 @@ class ProjectsPanel(QWidget):
         self.open_btn.setEnabled(False)
         self.open_btn.clicked.connect(self._open_workspace)
         btn_row.addWidget(self.open_btn)
+        self.lineage_btn = QPushButton(t("projects.lineage"), self)
+        self.lineage_btn.clicked.connect(self._show_lineage)
+        btn_row.addWidget(self.lineage_btn)
         btn_row.addStretch(1)
         self.delete_btn = QPushButton(t("projects.delete"), self)
         self.delete_btn.setObjectName("deleteBtn")
@@ -266,14 +335,41 @@ class ProjectsPanel(QWidget):
         self.hist_header.setText(
             t("projects.project", name=project.name) + "   ·   "
             + t("projects.turns", n=len(turns) // 2))
+        lineage_lines = self._lineage_lines(project)
         if not turns:
-            self.history_view.setPlainText(t("projects.no_history"))
+            self.history_view.setPlainText("\n".join(lineage_lines + ([""] if lineage_lines else [])
+                                                      + [t("projects.no_history")]))
             return
-        lines = [t("projects.dir", path=project.root), ""]
+        lines = [t("projects.dir", path=project.root)] + lineage_lines + [""]
         for turn in turns:
             who = t("role.user") if turn["role"] == "user" else t("role.assistant")
             lines.append(f"【{who}】{turn['content']}")
         self.history_view.setPlainText("\n".join(lines))
+
+    def _lineage_lines(self, project) -> list[str]:
+        from pillow_assistant.core import project_lineage as lineage
+
+        try:
+            graph = lineage.build_graph(self.store)
+        except Exception:
+            return []
+        lines = []
+        ups = lineage.parents(graph, project.id)
+        downs = lineage.children(graph, project.id)
+        if ups:
+            lines.append(t("projects.lineage_parents", names="、".join(n["name"] for n in ups)))
+        if downs:
+            lines.append(t("projects.lineage_children", names="、".join(n["name"] for n in downs)))
+        return lines
+
+    def _show_lineage(self) -> None:
+        project = None if self._chat_selected() else self._current
+        dlg = _LineageDialog(self.store, project.id if project is not None else None, parent=self)
+        self._armed = False  # the dialog takes activation; don't auto-close behind it
+        try:
+            dlg.exec()
+        finally:
+            QTimer.singleShot(350, lambda: setattr(self, "_armed", True))
 
     def _show_chat(self) -> None:
         lines = [t("projects.dir", path=self._chat_path.parent), ""]

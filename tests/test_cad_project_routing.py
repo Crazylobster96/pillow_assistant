@@ -181,7 +181,7 @@ def test_store_inherit_copies_outputs(tmp_path):
     (cam.workspace / "models" / "gearbox.py").write_text("changed")
     assert (cad.workspace / "models" / "gearbox.py").read_text() == "print(1)"  # a copy, not a link
     again = store.get(cam.id)
-    assert again.inherited == [{"id": cad.id, "name": "齿轮箱", "files": copied}]
+    assert [(e["id"], e["name"], e["files"]) for e in again.inherited] == [(cad.id, "齿轮箱", copied)]
 
 
 def test_project_manager_applies_inheritance(tmp_path):
@@ -210,3 +210,64 @@ def test_inherit_project_tool(tmp_path):
     assert not asyncio.run(tool({"project": "演示"}, ctx)).ok
     ctx.session.project_id = None
     assert not asyncio.run(tool({"project": "齿轮箱"}, ctx)).ok
+
+
+def _lineage_store(tmp_path):
+    store = ProjectStore(tmp_path)
+    cad = _cad_workspace(store)
+    cam = store.create("齿轮箱 CAM")
+    store.inherit(cam, cad)
+    v2 = store.create("齿轮箱 v2")
+    store.inherit(v2, cad)
+    v2cam = store.create("齿轮箱 v2 CAM")
+    store.inherit(v2cam, v2)
+    store.create("无关项目")
+    return store, cad, cam, v2, v2cam
+
+
+def test_lineage_graph_and_text(tmp_path):
+    from pillow_assistant.core import project_lineage as lineage
+
+    store, cad, cam, v2, v2cam = _lineage_store(tmp_path)
+    graph = lineage.build_graph(store)
+    assert len(graph["nodes"]) == 5 and len(graph["edges"]) == 3
+    assert [n["name"] for n in lineage.parents(graph, v2cam.id)] == ["齿轮箱 v2"]
+    assert sorted(n["name"] for n in lineage.children(graph, cad.id)) == ["齿轮箱 CAM", "齿轮箱 v2"]
+    part = lineage.component(graph, v2cam.id)
+    assert set(part["nodes"]) == {cad.id, cam.id, v2.id, v2cam.id}  # the unrelated project is left out
+    text = lineage.render_text(part, v2cam.id)
+    assert text.splitlines()[0].startswith("齿轮箱 ") and "◀" in text and "无关项目" not in text
+    svg = lineage.render_svg(part, v2cam.id)
+    assert svg.startswith("<svg") and svg.count("<rect") == 5 and "齿轮箱 v2 CAM" in svg
+    assert "<svg" in lineage.render_html(part, v2cam.id)
+    lonely = lineage.component(graph, store.find_by_name("无关项目")[0].id)
+    assert not lonely["edges"] and lineage.render_text(lonely) == lineage.render_text({"nodes": {}, "edges": []})
+
+
+def test_lineage_keeps_deleted_parents(tmp_path):
+    from pillow_assistant.core import project_lineage as lineage
+
+    store, cad, cam, v2, v2cam = _lineage_store(tmp_path)
+    assert store.delete(cad.id)
+    graph = lineage.build_graph(store)
+    assert graph["nodes"][cad.id]["deleted"] and graph["nodes"][cad.id]["name"] == "齿轮箱"
+    assert len(lineage.component(graph, cam.id)["edges"]) == 3
+
+
+def test_project_lineage_tool(tmp_path, monkeypatch):
+    import webbrowser
+
+    from pillow_assistant.core.tools.builtin.project_tools import ProjectLineageTool
+
+    store, cad, cam, v2, v2cam = _lineage_store(tmp_path)
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
+    ctx = SimpleNamespace(project_store=store, session=SimpleNamespace(project_id=v2.id))
+    tool = ProjectLineageTool()
+    result = asyncio.run(tool({}, ctx))
+    assert result.ok and "齿轮箱 v2 CAM" in result.text and not opened
+    result = asyncio.run(tool({"project": "齿轮箱 CAM", "open": True}, ctx))
+    assert result.ok and opened and (tmp_path / "lineage.html").is_file()
+    assert asyncio.run(tool({"project": "all"}, ctx)).ok
+    assert not asyncio.run(tool({"project": "不存在"}, ctx)).ok
+    assert len(store.list()) == 5  # lineage.html beside the project folders is not a project

@@ -167,7 +167,7 @@ class ProjectStore:
                 shutil.copy2(path, target)
                 copied.append(rel.as_posix())
         project.inherited = [e for e in project.inherited if e.get("id") != source.id] + [
-            {"id": source.id, "name": source.name, "files": copied}]
+            {"id": source.id, "name": source.name, "files": copied, "at": time.time()}]
         self._write(project)
         return copied
 
