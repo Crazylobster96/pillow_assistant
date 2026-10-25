@@ -30,6 +30,10 @@ Update flow (never touches files that are in use):
    source archive and stages it.  It is applied on the next launch.
 3. Offline, every network step fails fast and silently; the app always
    starts with what is installed.
+   Where GitHub downloads or PyPI are blocked (mainland China), the source
+   archive comes through a GitHub mirror and pip falls back to a PyPI mirror
+   (``mirrors`` in update.json: auto / cn / off).  A mirrored archive is only
+   used when its files hash to the commit's git tree from the GitHub API.
 4. A freshly applied version is on probation (``updates/probation.json``)
    until it has run for ``HEALTHY_SECONDS`` or exited cleanly.  If it raises
    during start-up, or two starts in a row never become healthy (hard
@@ -75,6 +79,11 @@ DEFAULT_CONFIG = {
     # Create desktop + Start menu shortcuts on first start (and again after
     # the bundle folder is moved). A shortcut the user deleted stays deleted.
     "desktop_shortcut": True,
+    # Mainland China: "auto" tries GitHub / PyPI first and mirrors after them,
+    # "cn" tries the mirrors first, "off" never uses them.
+    "mirrors": "auto",
+    "github_mirrors": ["https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/"],
+    "pypi_mirrors": ["https://pypi.tuna.tsinghua.edu.cn/simple", "https://mirrors.aliyun.com/pypi/simple/"],
 }
 
 HEALTHY_SECONDS = 60      # a new version that has run this long is kept
@@ -229,8 +238,87 @@ def fetch_remote_version(cfg: dict) -> Optional[dict]:
         "ref": ref,
         "channel": cfg.get("channel", "branch"),
         "committed_at": (commit.get("commit") or {}).get("committer", {}).get("date"),
+        "tree": ((commit.get("commit") or {}).get("tree") or {}).get("sha", ""),
         "zip_url": f"{API}/repos/{repo}/zipball/{sha}",
+        "archive_url": f"https://github.com/{repo}/archive/{sha}.zip",
     }
+
+
+# -- mirrors -----------------------------------------------------------------
+def _mirror_mode(cfg: dict) -> str:
+    mode = str(cfg.get("mirrors") or "auto").lower()
+    return mode if mode in ("auto", "cn", "off") else "auto"
+
+
+def _mirror_list(cfg: dict, key: str) -> list:
+    if _mirror_mode(cfg) == "off":
+        return []
+    return [str(m) for m in cfg.get(key) or [] if str(m).startswith("https://")]
+
+
+def download_sources(cfg: dict, remote: dict) -> list:
+    """``(url, mirrored)`` to fetch the source archive from, in order."""
+    direct = [(remote["zip_url"], False)]
+    if not remote.get("tree"):
+        return direct  # nothing to check a mirrored copy against
+    via = [((m if m.endswith("/") else m + "/") + remote["archive_url"], True)
+           for m in _mirror_list(cfg, "github_mirrors")]
+    return via + direct if _mirror_mode(cfg) == "cn" else direct + via
+
+
+def _git_object(kind: str, data: bytes) -> bytes:
+    return hashlib.sha1(f"{kind} {len(data)}\0".encode() + data).digest()
+
+
+def _crlf_patterns(files: dict) -> list:
+    """Globs that .gitattributes checks out with CRLF; GitHub's archives contain them that way."""
+    raw = files.get(".gitattributes", (b"", 0))[0].decode("utf-8", "replace")
+    out = []
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) > 1 and not parts[0].startswith("#") and "eol=crlf" in parts[1:]:
+            out.append(parts[0])
+    return out
+
+
+def archive_tree_sha(archive: bytes) -> str:
+    """The git tree id of a GitHub source archive, to compare with the commit's tree."""
+    import fnmatch
+
+    files = {}
+    with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+        infos = [i for i in zf.infolist() if not i.is_dir()]
+        prefix = os.path.commonprefix([i.filename for i in infos]).rpartition("/")[0]
+        prefix = prefix + "/" if prefix else ""
+        for info in infos:
+            mode = (info.external_attr >> 16) & 0o170777
+            files[info.filename[len(prefix):]] = (zf.read(info), mode)
+    crlf = _crlf_patterns(files)
+    tree: dict = {}
+    for path, (data, mode) in files.items():
+        name = path.rsplit("/", 1)[-1]
+        if any(fnmatch.fnmatch(name, pat) or fnmatch.fnmatch(path, pat) for pat in crlf):
+            data = data.replace(b"\r\n", b"\n")
+        if mode & 0o170000 == 0o120000:
+            entry = ("120000", _git_object("blob", data))
+        else:
+            entry = ("100755" if mode & 0o111 else "100644", _git_object("blob", data))
+        node = tree
+        parts = path.split("/")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = entry
+
+    def write(node: dict) -> bytes:
+        rows = []
+        for name, value in node.items():
+            if isinstance(value, dict):
+                rows.append((name + "/", b"40000 " + name.encode() + b"\0" + write(value)))
+            else:
+                rows.append((name, value[0].encode() + b" " + name.encode() + b"\0" + value[1]))
+        return _git_object("tree", b"".join(r for _, r in sorted(rows)))
+
+    return write(tree).hex()
 
 
 def is_newer(cfg: dict, local_sha: str, remote_sha: str) -> bool:
@@ -285,7 +373,19 @@ def stage_update(paths: Paths, cfg: dict,
         return staged
 
     log.info("downloading update %s (%s)", remote["sha"][:10], remote["ref"])
-    archive = download(remote["zip_url"], max(60.0, float(cfg["timeout_seconds"]) * 8))
+    archive, errors = None, []
+    for url, mirrored in download_sources(cfg, remote):
+        try:
+            data = download(url, max(60.0, float(cfg["timeout_seconds"]) * 8))
+            if mirrored and archive_tree_sha(data) != remote["tree"]:
+                raise ValueError("files do not match the commit on GitHub")
+            archive = data
+            break
+        except Exception as exc:  # noqa: BLE001 - try the next source
+            log.info("download from %s failed: %s", url, exc)
+            errors.append(exc)
+    if archive is None:
+        raise errors[-1]
     work = paths.updates / f"download-{uuid.uuid4().hex[:8]}"
     work.mkdir(parents=True)
     try:
@@ -311,23 +411,31 @@ def stage_update(paths: Paths, cfg: dict,
 
 
 # -- applying ----------------------------------------------------------------
+def pip_indexes(cfg: dict) -> list:
+    """Package indexes to try in order; None is pip's own default (PyPI)."""
+    mirrors = _mirror_list(cfg, "pypi_mirrors")
+    return mirrors + [None] if _mirror_mode(cfg) == "cn" else [None] + mirrors
+
+
 def _install_requirements(paths: Paths, requirements: Path) -> bool:
-    cmd = [str(paths.python_exe), "-E", "-s", "-m", "pip", "install",
-           "--disable-pip-version-check", "--no-warn-script-location",
-           "-r", str(requirements)]
-    log.info("installing changed dependencies: %s", " ".join(cmd))
+    base = [str(paths.python_exe), "-E", "-s", "-m", "pip", "install",
+            "--disable-pip-version-check", "--no-warn-script-location",
+            "-r", str(requirements)]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                              creationflags=flags)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        log.warning("dependency install failed: %s", exc)
-        return False
-    if proc.returncode != 0:
+    for index in pip_indexes(load_config(paths)):
+        cmd = base + (["-i", index] if index else [])
+        log.info("installing changed dependencies: %s", " ".join(cmd))
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
+                                  creationflags=flags)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log.warning("dependency install failed: %s", exc)
+            continue
+        if proc.returncode == 0:
+            return True
         log.warning("dependency install failed (%s):\n%s", proc.returncode,
                     (proc.stdout + proc.stderr)[-4000:])
-        return False
-    return True
+    return False
 
 
 def apply_staged(paths: Paths,
@@ -641,6 +749,11 @@ def setup_environment(paths: Paths) -> None:
     env.setdefault("UV_PYTHON_INSTALL_DIR", str(cad / "python"))
     env.setdefault("UV_TOOL_DIR", str(cad / "tools"))
     env.setdefault("PILLOW_CAD_APPS_DIR", str(cad / "apps"))  # OrcaSlicer etc., installed on first use
+    # Mainland China mirrors for downloads the app makes itself (core/mirrors.py).
+    cfg = load_config(paths)
+    env.setdefault("PILLOW_MIRRORS", _mirror_mode(cfg))
+    env.setdefault("PILLOW_GITHUB_MIRRORS", ",".join(_mirror_list(cfg, "github_mirrors")))
+    env.setdefault("PILLOW_PYPI_MIRRORS", ",".join(_mirror_list(cfg, "pypi_mirrors")))
     # Offline-friendly defaults: never block start-up on remote lookups.
     env.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     env.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

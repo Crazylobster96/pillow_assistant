@@ -7,7 +7,8 @@
     python\         relocatable CPython (NuGet "python" package) + every dependency
     app\            the committed source tree + VERSION.json
     ms-playwright\  Chromium for the browser tool
-    cad-runtime\    uv cache with the pinned text-to-cad cadgen runtime (CAD works offline)
+    cad-runtime\    uv cache with the pinned text-to-cad cadgen runtime (CAD works offline),
+                    and apps\pins.json for CAD apps installed on first use
     launcher.pyw, update.json, PillowAssistant.exe, PillowAssistant-console.bat
   Optionally copies a prefetched models\ folder (see prefetch_models.py).
 
@@ -98,6 +99,17 @@ if (-not $SkipCad) {
     $Uvx = Join-Path $Bundle "python\Scripts\uvx.exe"
     Run $Uvx (@($Upstream.uvx_args) + @("python", "-c", "import build123d, cadgen; print('cadgen ok')"))
     Remove-Item Env:UV_CACHE_DIR, Env:UV_PYTHON_INSTALL_DIR, Env:UV_TOOL_DIR, Env:DO_NOT_TRACK
+}
+
+# 3c. CAD apps (FreeCAD, OrcaSlicer, Bambu Studio) install on first use, or come from
+#     the separate PillowAssistant-<app>.zip release packs. Pin the release assets
+#     (URL + SHA-256) so first-use installs still work through a mirror when the
+#     GitHub API is unreachable (mainland China).
+if (-not $SkipCad) {
+    Step "CAD app pins"
+    $Pins = Join-Path $Bundle "cad-runtime\apps\pins.json"
+    & $Py -E -s -m pillow_assistant.capabilities.cad_apps pin windows-x64 $Pins
+    if ($LASTEXITCODE -ne 0) { Write-Warning "could not pin CAD app releases; first-use installs need the GitHub API" }
 }
 
 # 4. Application source: exactly the committed tree, like the updater downloads.

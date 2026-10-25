@@ -102,7 +102,7 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 
 #### 文本生成 CAD（text-to-cad）
 
-> 这部分在 `text-to-cad` 分支单独维护（每天自动合并 main 并同步上游）；Windows 离线包见 Releases 里名字带 `text-to-cad` 的版本，它的自动升级跟随该分支。
+> 这部分在 `text-to-cad` 分支单独维护（每天自动合并 main 并同步上游）；Windows 离线包见 Releases 里名字带 `text-to-cad` 的版本，它的自动升级跟随该分支。FreeCAD、OrcaSlicer、Bambu Studio 有单独的离线包（`PillowAssistant-<软件>.zip`），解压到主包位置即可；不装也会在首次使用时自动下载。在中国大陆连不上 GitHub 或 PyPI 时，代码更新、软件下载、依赖安装会自动改走镜像，并核对 GitHub 公布的哈希（`update.json` 的 `mirrors`：`auto` / `cn` / `off`）。
 
 集成了 [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)：直接说「做一个 40×20×6 的安装支架，中间开 8mm 孔，导出 STEP 和 STL」「给这个零件出一张工程图」「把它切成拓竹 X1C 能打的 G-code」。Agent 会应用对应的 CAD 技能（`cad` / `dxf` / `engineering-drawing` / `dfm` / `dfam-check` / `gcode` / `step-parts` / `urdf` / `srdf` / `sdf` / `bambu-labs` / `sendcutsend`），在项目 workspace 写 build123d 参数化模型脚本，再用 `text_to_cad` 工具在固定版本的 cadgen 运行时里生成 STEP / STL / 3MF / GLB / DXF / PDF 等产物（每次执行前会请你确认）。
 
@@ -261,7 +261,7 @@ Dropped videos play right in the panel. Try: "this video is too big for the mode
 
 #### Text-to-CAD (text-to-cad)
 
-> Maintained on the `text-to-cad` branch (main is merged in and upstream synced daily); its Windows bundles are the releases named `text-to-cad` and auto-update from that branch.
+> Maintained on the `text-to-cad` branch (main is merged in and upstream synced daily); its Windows bundles are the releases named `text-to-cad` and auto-update from that branch. FreeCAD, OrcaSlicer and Bambu Studio come as separate offline packs (`PillowAssistant-<app>.zip`) to unpack over the bundle, or download on first use. Where GitHub or PyPI is blocked (mainland China), code updates, app downloads and dependency installs fall back to mirrors and are checked against GitHub's own hashes (`mirrors` in `update.json`: `auto` / `cn` / `off`).
 
 Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad): ask "make a 40×20×6 mounting bracket with an 8 mm hole, export STEP and STL", "make an engineering drawing of this part", or "slice it to G-code for a Bambu X1C". The Agent applies the matching CAD skill (`cad`, `dxf`, `engineering-drawing`, `dfm`, `dfam-check`, `gcode`, `step-parts`, `urdf`, `srdf`, `sdf`, `bambu-labs`, `sendcutsend`), writes a build123d parametric model script in the project workspace, and runs it with the `text_to_cad` tool in the pinned cadgen runtime to produce STEP / STL / 3MF / GLB / DXF / PDF outputs (each run asks for confirmation).
 
