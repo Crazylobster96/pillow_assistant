@@ -22,6 +22,10 @@ on:
         description: "Also publish the offline speech-model pack"
         type: boolean
         default: true
+      include_cad_apps:
+        description: "Also publish the CAD app packs (FreeCAD, OrcaSlicer, Bambu Studio)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -52,6 +56,8 @@ jobs:
 
       - name: Build bundle
         shell: pwsh
+        env:
+          PILLOW_UPDATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub API rate limit for the CAD app pins
         run: ./packaging/windows/build.ps1 -OutDir dist -Version ${{ steps.ver.outputs.version }}
 
       - name: Shortcut smoke test
@@ -97,8 +103,53 @@ jobs:
           compression-level: 0
           retention-days: 30
 
+  cad-apps:
+    # Also on pull requests, so a change in the apps' release asset names shows up before a release.
+    if: github.event_name != 'workflow_dispatch' || inputs.include_cad_apps
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [freecad, orcaslicer, bambu-studio]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download ${{ matrix.app }}
+        shell: pwsh
+        env:
+          PILLOW_UPDATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PILLOW_CAD_APPS_DIR: ${{ github.workspace }}\dist\PillowAssistant\cad-runtime\apps
+          PILLOW_MIRRORS: "off"
+        run: |
+          python -I -c "import sys; sys.path.insert(0, '.'); from pillow_assistant.capabilities import cad_apps; sys.exit(cad_apps.main(['install', '${{ matrix.app }}']))"
+          if ($LASTEXITCODE -ne 0) { throw "install failed" }
+      - name: Pack
+        shell: pwsh
+        run: |
+          $zip = "PillowAssistant-${{ matrix.app }}.zip"
+          Push-Location dist
+          7z a -tzip -mx=7 -mmt=on $zip "PillowAssistant\cad-runtime\apps\${{ matrix.app }}"
+          if ($LASTEXITCODE -ne 0) { throw "7z failed" }
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          "$hash  $zip" | Out-File -Encoding ascii "$zip.sha256"
+          $mb = [math]::Round((Get-Item $zip).Length / 1MB)
+          Write-Host "$zip $mb MB"
+          if ((Get-Item $zip).Length -ge 2GB) { throw "$zip is over GitHub's 2 GB asset limit" }
+          Pop-Location
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PillowAssistant-${{ matrix.app }}
+          path: |
+            dist/PillowAssistant-${{ matrix.app }}.zip
+            dist/PillowAssistant-${{ matrix.app }}.zip.sha256
+          compression-level: 0
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 30 }}
+
   release:
-    needs: [bundle, models]
+    needs: [bundle, models, cad-apps]
     if: >-
       always() && needs.bundle.result == 'success' &&
       (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
@@ -113,7 +164,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag || format('win-{0}', needs.bundle.outputs.version) }}
           target_commitish: ${{ github.sha }}
-          name: Pillow Assistant ${{ needs.bundle.outputs.version }} (Windows offline · text-to-cad)
+          name: Pillow Assistant ${{ needs.bundle.outputs.version }} (Windows offline · text-to-cad · CAM)
           # The text-to-cad edition is published beside main's releases, not as "Latest".
           make_latest: "false"
           body: |
@@ -121,11 +172,17 @@ jobs:
 
             **text-to-cad 版**：内置 [text-to-cad](https://github.com/earthtojake/text-to-cad) 文本生成 CAD（STEP / STL / 3MF / GLB / DXF / 工程图 / URDF …），cadgen 运行时已预装在 `cad-runtime\`，可离线建模。自动升级跟随 `text-to-cad` 分支，该分支每天同步 main 与 text-to-cad 上游新版；新版本启动失败会自动回滚。
 
+            **CAM**：激光/等离子切割（DXF）、3 轴铣削与 3+2 定轴（STEP，经 FreeCAD CAM，GRBL / LinuxCNC / Fanuc / Mach3/4 等）。
+
             1. 下载 `PillowAssistant-windows-x64-*.zip`，解压到任意可写目录（如 `D:\PillowAssistant`），双击 `PillowAssistant.exe`。
             2. 可选：下载 `PillowAssistant-models.zip`，解压到与主包相同的位置（会合并出 `PillowAssistant\models\`），语音转文字即可完全离线使用。
-            3. 联网时自动从 GitHub 获取最新代码并在下次启动时升级；设置见 `update.json`。
+            3. 可选：下载 `PillowAssistant-freecad.zip`（CAM 铣削）、`PillowAssistant-orcaslicer.zip`、`PillowAssistant-bambu-studio.zip`（3D 打印切片），同样解压到主包位置（合并到 `PillowAssistant\cad-runtime\apps\`），即可离线使用。不下载也可以，首次使用时会自动下载。
+            4. 联网时自动从 GitHub 获取最新代码并在下次启动时升级；设置见 `update.json`。
+
+            **中国大陆**：GitHub、PyPI 连不上时，代码更新、CAD 软件下载、依赖安装和 cadgen 运行时会自动改走镜像（ghfast.top / gh-proxy.com / ghproxy.net，清华 / 阿里云 PyPI），镜像下载的文件都会和 GitHub 公布的哈希核对。`update.json` 里 `"mirrors": "cn"` 可让镜像优先，`"off"` 关闭。本页的安装包也可以在下载地址前加 `https://ghfast.top/` 下载。
 
             Commit: ${{ github.sha }}
           files: |
             dist/*.zip
             dist/*.sha256
+          fail_on_unmatched_files: true

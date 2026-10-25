@@ -2,8 +2,8 @@
   "name": "cad_app",
   "version": "1.0.0",
   "description": {
-    "zh": "text-to-cad 的 gcode / bambu-labs 技能用到的外部应用（OrcaSlicer 切片、Bambu Studio、Bambu Connect 发打印）：首次使用时自动下载安装，之后运行其命令行或用它打开文件。经用户确认后执行。",
-    "en": "External apps used by the text-to-cad gcode / bambu-labs skills (OrcaSlicer slicing, Bambu Studio, Bambu Connect printing): installed automatically on first use, then run their command line or open files in them. Runs after user confirmation."
+    "zh": "text-to-cad 的 gcode / bambu-labs 技能用到的外部应用（OrcaSlicer 切片、Bambu Studio、Bambu Connect 发打印；cam 技能铣削用的 FreeCAD）：首次使用时自动下载安装，之后运行其命令行或用它打开文件。经用户确认后执行。",
+    "en": "External apps used by the text-to-cad gcode / bambu-labs skills (OrcaSlicer slicing, Bambu Studio, Bambu Connect printing; FreeCAD for cam milling): installed automatically on first use, then run their command line or open files in them. Runs after user confirmation."
   },
   "parameters": {
     "zh": {
@@ -14,7 +14,8 @@
           "enum": [
             "orcaslicer",
             "bambu-studio",
-            "bambu-connect"
+            "bambu-connect",
+            "freecad"
           ],
           "description": "应用"
         },
@@ -52,7 +53,8 @@
           "enum": [
             "orcaslicer",
             "bambu-studio",
-            "bambu-connect"
+            "bambu-connect",
+            "freecad"
           ],
           "description": "the app"
         },

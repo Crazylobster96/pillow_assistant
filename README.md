@@ -102,7 +102,7 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 
 #### 文本生成 CAD（text-to-cad）
 
-> 这部分在 `text-to-cad` 分支单独维护（每天自动合并 main 并同步上游）；Windows 离线包见 Releases 里名字带 `text-to-cad` 的版本，它的自动升级跟随该分支。
+> 这部分在 `text-to-cad` 分支单独维护（每天自动合并 main 并同步上游）；Windows 离线包见 Releases 里名字带 `text-to-cad` 的版本，它的自动升级跟随该分支。FreeCAD、OrcaSlicer、Bambu Studio 有单独的离线包（`PillowAssistant-<软件>.zip`），解压到主包位置即可；不装也会在首次使用时自动下载。在中国大陆连不上 GitHub 或 PyPI 时，代码更新、软件下载、依赖安装会自动改走镜像，并核对 GitHub 公布的哈希（`update.json` 的 `mirrors`：`auto` / `cn` / `off`）。
 
 集成了 [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)：直接说「做一个 40×20×6 的安装支架，中间开 8mm 孔，导出 STEP 和 STL」「给这个零件出一张工程图」「把它切成拓竹 X1C 能打的 G-code」。Agent 会应用对应的 CAD 技能（`cad` / `dxf` / `engineering-drawing` / `dfm` / `dfam-check` / `gcode` / `step-parts` / `urdf` / `srdf` / `sdf` / `bambu-labs` / `sendcutsend`），在项目 workspace 写 build123d 参数化模型脚本，再用 `text_to_cad` 工具在固定版本的 cadgen 运行时里生成 STEP / STL / 3MF / GLB / DXF / PDF 等产物（每次执行前会请你确认）。
 
@@ -110,6 +110,8 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 - **自动跟随上游升级**：`.github/workflows/sync-text-to-cad.yml` 每天检查 text-to-cad 的 `latest` 分支（只收已发布到 PyPI 的正式版），有新版就把技能同步到 `pillow_assistant/capabilities/skills/text_to_cad/`、更新 cadgen 版本锁定、跑测试与 cadgen 冒烟测试后推送到 main；Windows 包的自动升级随之拿到新技能，新版 cadgen 在首次使用时下载。也可手动执行 `python scripts/sync_text_to_cad.py`。
 - **新版有问题可回滚**：Windows 包的新版本在试用期内启动失败会自动退回上一版，也可 `PillowAssistant-console.bat --rollback` 手动回滚，回滚过的版本不会再被自动装回；要让所有人退回某个旧的 text-to-cad，在仓库 Actions 变量里设 `TEXT_TO_CAD_REF=v0.7.25`（旧标签）并运行同步工作流，删掉变量即恢复跟随最新版。
 - 切片和发打印用到的外部应用由 `cad_app` 工具在首次使用时自动安装：OrcaSlicer、Bambu Studio 从官方 GitHub Release 下载免安装版到 `cad-runtime\apps`（非离线包为 `~/.pillow/cad-apps`）；Bambu Connect 是拓竹闭源软件，会打开官方下载页让你自己安装。
+- **CAM（激光 / 等离子切割）**：说「把这个零件的轮廓出成 GRBL 激光切割的 G-code」，Agent 应用内置的 `cam` 技能，先问清机床和材料参数（进给、功率、穿孔延时、切缝不会替你猜），再用 `text_to_cam` 工具把 DXF 转成 GRBL / LinuxCNC / Fanuc 代码：切缝补偿、先切内孔再切外轮廓、废料侧引入线、行程检查，并生成预览 SVG。它只写文件，不连接机床。
+- **CAM（3 轴 CNC 铣削）**：说「用 6mm 平底刀和 6mm 钻头把这个零件出成 GRBL 程序」，`cam_mill` 工具用 FreeCAD 的 CAM 工作台（LGPL，首次使用自动下载到 `cad-runtime\apps`）把 STEP 零件变成面铣、自适应开粗、钻孔、精加工、球头曲面精加工的 G-code，按 GRBL / LinuxCNC / Fanuc / Mach3/4 等控制器后处理（GRBL 每把刀一个文件），检查毛坯、行程和刃长，并生成预览图、加工单和可在 FreeCAD 里仿真的 `.FCStd` 工程。转速、进给、切深必须由你提供。有第四轴（A/B）或摇篮（AC/BC）时可做 3+2 定轴：给出每个工位的刀具来向（如 +Y、-Z），每个工位一个程序，旋转前自动抬刀，并检查角度限位和回转半径；Fanuc 还可输出 G68.2 倾斜面。五轴联动暂不支持。
 - 想覆盖某个 CAD 技能，在 `~/.pillow/skills/<同名>/SKILL.md` 放自己的版本即可。
 
 #### 让 Agent 配置自己
@@ -259,7 +261,7 @@ Dropped videos play right in the panel. Try: "this video is too big for the mode
 
 #### Text-to-CAD (text-to-cad)
 
-> Maintained on the `text-to-cad` branch (main is merged in and upstream synced daily); its Windows bundles are the releases named `text-to-cad` and auto-update from that branch.
+> Maintained on the `text-to-cad` branch (main is merged in and upstream synced daily); its Windows bundles are the releases named `text-to-cad` and auto-update from that branch. FreeCAD, OrcaSlicer and Bambu Studio come as separate offline packs (`PillowAssistant-<app>.zip`) to unpack over the bundle, or download on first use. Where GitHub or PyPI is blocked (mainland China), code updates, app downloads and dependency installs fall back to mirrors and are checked against GitHub's own hashes (`mirrors` in `update.json`: `auto` / `cn` / `off`).
 
 Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad): ask "make a 40×20×6 mounting bracket with an 8 mm hole, export STEP and STL", "make an engineering drawing of this part", or "slice it to G-code for a Bambu X1C". The Agent applies the matching CAD skill (`cad`, `dxf`, `engineering-drawing`, `dfm`, `dfam-check`, `gcode`, `step-parts`, `urdf`, `srdf`, `sdf`, `bambu-labs`, `sendcutsend`), writes a build123d parametric model script in the project workspace, and runs it with the `text_to_cad` tool in the pinned cadgen runtime to produce STEP / STL / 3MF / GLB / DXF / PDF outputs (each run asks for confirmation).
 
@@ -267,6 +269,8 @@ Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-ca
 - **Follows upstream automatically**: `.github/workflows/sync-text-to-cad.yml` checks text-to-cad's `latest` branch daily (releases only, once on PyPI), vendors the skills into `pillow_assistant/capabilities/skills/text_to_cad/`, bumps the cadgen pin, runs the tests plus a cadgen smoke test and pushes to main; the Windows auto-updater then picks it up and the new cadgen downloads on first use. Run `python scripts/sync_text_to_cad.py` to sync by hand.
 - **Rollback**: a new Windows-bundle version that fails to start during its probation is rolled back automatically, `PillowAssistant-console.bat --rollback` does it by hand, and a rolled-back version is never auto-installed again. To pin everyone to an older text-to-cad, set the Actions variable `TEXT_TO_CAD_REF` to an old tag (e.g. `v0.7.25`) and run the sync workflow; delete it to follow the latest release again.
 - External apps are installed on first use by the `cad_app` tool: OrcaSlicer and Bambu Studio portable builds from their official GitHub releases go to `cad-runtime/apps` (or `~/.pillow/cad-apps`); Bambu Connect is closed source, so its official download page is opened for you.
+- **CAM (laser / plasma cutting)**: ask "turn this part's outline into GRBL laser G-code". The Agent applies the built-in `cam` skill, asks for the machine and material settings (it never guesses feed, power, pierce delay or kerf), and runs the `text_to_cam` tool to turn the DXF into GRBL / LinuxCNC / Fanuc code with kerf compensation, holes before outlines, scrap-side lead-ins, a bed check and a preview SVG. It only writes files and never connects to a machine.
+- **CAM (3-axis CNC milling)**: ask "make GRBL programs for this part with a 6 mm end mill and a 6 mm drill". The `cam_mill` tool runs FreeCAD's CAM workbench (LGPL, downloaded on first use into `cad-runtime/apps`) to turn the STEP part into facing, adaptive roughing, drilling, finishing and ball-end surfacing G-code, posted for GRBL / LinuxCNC / Fanuc / Mach3/4 and more (one file per tool on GRBL). It checks stock, travel and flute length, and writes a preview, a setup sheet and a `.FCStd` project to simulate in FreeCAD. You supply speeds, feeds and depths of cut. With a 4th axis (A/B) or a trunnion (AC/BC) it also does 3+2 indexed work: give the direction the tool comes from in each setup (such as +Y or -Z) and it writes one program per setup, retracts before every rotation, and checks the axis limits and the swing radius; on Fanuc it can write a G68.2 tilted plane instead. Simultaneous 5-axis is not supported.
 - To override a CAD skill, put your own `~/.pillow/skills/<same-name>/SKILL.md`.
 
 #### Let the Agent configure itself

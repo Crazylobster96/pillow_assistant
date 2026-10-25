@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 from pillow_assistant.capabilities import text_to_cad
+from pillow_assistant.core import mirrors
 from pillow_assistant.core.i18n import t
 from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 from pillow_assistant.core.tools.builtin.cli_tool import MAX_OUTPUT, _safe_environment, _split_command
@@ -97,7 +98,7 @@ class TextToCadTool:
         ws = Path(ctx.workspace)
         before = _outputs(ws)
 
-        def run(cmd):
+        def run(cmd, env=env):
             try:
                 p = subprocess.run(cmd, shell=False, cwd=str(ws), env=env, capture_output=True,
                                    text=True, encoding="utf-8", errors="replace", timeout=RUN_TIMEOUT)
@@ -111,7 +112,12 @@ class TextToCadTool:
             # Cache first, so a prewarmed runtime works offline; download only on a miss.
             rc, out, err = run(text_to_cad.cadgen_argv(program, argv, with_requirements=requirements, offline=True))
             if text_to_cad.needs_download(rc, err):
-                rc, out, err = run(text_to_cad.cadgen_argv(program, argv, with_requirements=requirements))
+                # PyPI first, then the mainland China mirrors (core/mirrors.py) while it is still a fetch failure.
+                for variant in mirrors.uv_environments(env):
+                    rc, out, err = run(text_to_cad.cadgen_argv(program, argv, with_requirements=requirements),
+                                       variant)
+                    if not text_to_cad.network_failed(rc, err):
+                        break
             return rc, out, err
 
         loop = asyncio.get_event_loop()

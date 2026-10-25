@@ -72,3 +72,11 @@ def needs_download(returncode: int, stderr: str) -> bool:
     low = (stderr or "").lower()
     return returncode != 0 and ("offline mode" in low or "network was disabled" in low
                                 or "--offline" in low or "not found in the cache" in low)
+
+
+def network_failed(returncode: int, stderr: str) -> bool:
+    """Whether an online uv run failed to reach the package index or the Python downloads."""
+    low = (stderr or "").lower()
+    return returncode != 0 and any(k in low for k in (
+        "failed to fetch", "error sending request", "dns error", "tcp connect error", "connection",
+        "timed out", "failed to download", "request failed"))

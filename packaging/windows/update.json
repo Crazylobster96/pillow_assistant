@@ -1,5 +1,5 @@
 {
-  "_comment": "Auto-update settings. channel: 'branch' follows the newest commit of 'branch'; 'release' follows the newest GitHub release. Set enabled to false to turn updates off.",
+  "_comment": "Auto-update settings. channel: 'branch' follows the newest commit of 'branch'; 'release' follows the newest GitHub release. Set enabled to false to turn updates off. mirrors (mainland China): 'auto' tries GitHub/PyPI first then the mirrors, 'cn' tries the mirrors first, 'off' never uses them; everything from a GitHub mirror is checked against GitHub's own hashes.",
   "enabled": true,
   "repo": "Crazylobster96/pillow_assistant",
   "channel": "branch",
@@ -7,5 +7,15 @@
   "check_interval_hours": 6,
   "startup_delay_seconds": 20,
   "timeout_seconds": 15,
-  "desktop_shortcut": true
+  "desktop_shortcut": true,
+  "mirrors": "auto",
+  "github_mirrors": [
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/"
+  ],
+  "pypi_mirrors": [
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple/"
+  ]
 }
