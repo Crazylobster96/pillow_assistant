@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType
 from pillow_assistant.core import references
 from pillow_assistant.core.agent.loop import ToolLoopAgent
+from pillow_assistant.core.cad_intent import mentions_cad
 from pillow_assistant.core.i18n import t
 from pillow_assistant.core.model_router import select_model
 from pillow_assistant.core.observability import AuditLog
@@ -250,6 +251,10 @@ class Orchestrator:
         else:
             note = t("core.project_note", name=project.name) + (
                 t("core.project_continue") if tr.action == "continue" else t("core.project_new"))
+        if tr.rationale == "user-project":
+            note += t("core.project_by_user")
+        elif tr.action == "new" and mentions_cad(request.prompt):
+            note += t("core.project_name_hint")
         await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=note + "\n"))
 
         audit = AuditLog(project.root / "audit.jsonl")

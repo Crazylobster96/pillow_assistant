@@ -60,3 +60,38 @@ class DeleteProjectTool:
             session.session_id = None
             note = t("tool.delproj.current_cleared")
         return ToolResult(ok=True, text=t("tool.delproj.done", name=pname, id=pid) + note)
+
+
+@manifest_tool
+class RenameProjectTool:
+    name = "rename_project"
+    permission = Permission.WRITE_WS
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        store = getattr(ctx, "project_store", None)
+        if store is None:
+            return ToolResult(ok=False, text=t("tool.delproj.no_store"))
+        new_name = (args.get("new_name") or "").strip()
+        if not new_name:
+            return ToolResult(ok=False, text=t("tool.renproj.empty"))
+
+        # Default to the conversation's current project.
+        query = (args.get("project") or "").strip()
+        if not query:
+            project = store.get(getattr(getattr(ctx, "session", None), "project_id", None))
+            if project is None:
+                return ToolResult(ok=False, text=t("tool.renproj.no_current"))
+        else:
+            project = store.get(query)
+            if project is None:
+                matches = store.find_by_name(query)
+                if not matches:
+                    return ToolResult(ok=False, text=t("tool.delproj.not_found", name=query))
+                if len(matches) > 1:
+                    listing = "\n".join(f"- {p.name} (id={p.id})" for p in matches)
+                    return ToolResult(ok=False, text=t("tool.delproj.ambiguous", name=query, listing=listing))
+                project = matches[0]
+
+        old_name = project.name
+        store.rename(project.id, new_name)
+        return ToolResult(ok=True, text=t("tool.renproj.done", old=old_name, name=new_name, id=project.id))

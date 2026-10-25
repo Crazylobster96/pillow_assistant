@@ -1,0 +1,47 @@
+{
+  "name": "rename_project",
+  "version": "1.0.0",
+  "description": {
+    "zh": "给项目改名。用户要求给项目改名、重命名或指定项目名称时使用；不填 project 则改当前对话所在的项目，填了按项目名或 id 定位。",
+    "en": "Rename a project. Use when the user asks to rename a project or give it a name; without project it renames the current conversation's project, otherwise it locates the project by name or id."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "new_name": {
+          "type": "string",
+          "description": "新的项目名称"
+        },
+        "project": {
+          "type": "string",
+          "description": "要改名的项目名称或 id（留空 = 当前项目）"
+        }
+      },
+      "required": [
+        "new_name"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "new_name": {
+          "type": "string",
+          "description": "the new project name"
+        },
+        "project": {
+          "type": "string",
+          "description": "name or id of the project to rename (empty = the current project)"
+        }
+      },
+      "required": [
+        "new_name"
+      ]
+    }
+  },
+  "permission": "write_ws",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

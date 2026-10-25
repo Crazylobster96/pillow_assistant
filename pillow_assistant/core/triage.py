@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pillow_assistant.core import llm
+from pillow_assistant.core.cad_intent import mentions_cad
 from pillow_assistant.core.context_budget import join_context_and_prompt
+from pillow_assistant.core.project_directive import parse_project_directive, resolve_directive
 from pillow_assistant.capabilities.prompt_registry import render_prompt
 
 CONFIDENCE_THRESHOLD = 0.6
@@ -102,12 +104,26 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
     """Classify ``prompt`` (chat / continue / new) via the configured model."""
     if is_app_setting_request(prompt):
         return TriageResult(action="chat", confidence=1.0, rationale="app-setting")
+    # The user named the project ("项目：齿轮箱", "新建项目「支架」"): that wins.
+    directive = parse_project_directive(prompt)
+    decided = resolve_directive(directive, index) if directive else None
+    if decided and (decided[0] == "continue" or decided[2]):
+        action, pid, name = decided
+        return TriageResult(action=action, project_id=pid, name=name if action == "new" else None,
+                            confidence=1.0, rationale="user-project")
+    cad = mentions_cad(prompt)
     listing = "\n".join(
         f'- id={p["id"]} 名称="{p.get("name","")}" 最近="{(p.get("last_prompt") or "")[:60]}"'
         for p in index[:20]
     ) or "（暂无项目）"
     hint = ""
-    if current_id:
+    if cad:
+        # CAD work is judged on its own: by the part / product being designed,
+        # not by whichever project happens to be open.
+        hint = "\n" + render_prompt("routing.project_triage.cad")
+        if current_id:
+            hint += f"\n（当前打开的项目 id={current_id}，仅供参考。）"
+    elif current_id:
         hint = f"\n当前正在进行的项目 id={current_id}（若是它的延续工作，倾向 continue 该 id）。"
     messages = [
         {"role": "system", "content": _system_prompt()},
@@ -123,10 +139,15 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
             extra=llm.parse_extra(cfg.get("extra")),
         )
     except Exception:
+        if decided:
+            return TriageResult(action="new", name=derive_name(prompt), confidence=1.0, rationale="user-project")
         return TriageResult(action="chat", confidence=0.0, rationale="triage-failed")
 
     valid_ids = {str(p["id"]) for p in index}
     result = parse_triage(text, valid_ids)
+    if decided:  # an unnamed "新建项目": always a new project, named by the model
+        result = TriageResult(action="new", name=result.name if result.action == "new" else None,
+                              confidence=1.0, rationale="user-project")
     if result.action == "new" and not result.name:
         result.name = derive_name(prompt)
     return result
