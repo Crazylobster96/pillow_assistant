@@ -1,4 +1,4 @@
-"""Standard edition: CAD / concept-diagram talk suggests the text-to-cad-anatomy edition."""
+"""Standard edition: CAD / concept-diagram talk suggests the text-to-cad-to-cam edition."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def test_hint_once_per_run(monkeypatch):
     upgrade_hint.reset()
     assert upgrade_hint.cad_upgrade_hint("写个python脚本") is None
     hint = upgrade_hint.cad_upgrade_hint("画一张锁芯的概念图")
-    assert hint and upgrade_hint.RELEASES_URL in hint and "text-to-cad-anatomy" in hint
+    assert hint and upgrade_hint.RELEASES_URL in hint and "text-to-cad-to-cam" in hint
     assert upgrade_hint.cad_upgrade_hint("再画一张 CAD 图") is None
     upgrade_hint.reset()
 

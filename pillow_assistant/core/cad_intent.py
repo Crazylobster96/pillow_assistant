@@ -2,7 +2,7 @@
 
 Pure keyword heuristics, no model call. The text-to-cad edition uses it to
 route CAD requests into projects; the main edition uses it to suggest the
-text-to-cad-anatomy edition. Keep this file identical on both branches (the
+text-to-cad-to-cam edition. Keep this file identical on both branches (the
 daily sync merges main into text-to-cad).
 """
 
