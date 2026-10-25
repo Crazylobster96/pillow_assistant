@@ -6,6 +6,9 @@ name: Sync text-to-cad
 #   2. vendors the newest upstream release (upstream's `latest` branch gets each
 #      release once the matching cadgen is on PyPI) into
 #      pillow_assistant/capabilities/skills/text_to_cad/,
+#   3. vendors the newest release tag of https://github.com/wheresryan22/anatomy
+#      into pillow_assistant/capabilities/skills/anatomy/ (when the branch has
+#      scripts/sync_anatomy.py),
 # tests, and pushes the branch. Windows bundles built from it follow the branch
 # (update.json), so they upgrade on their own.
 #
@@ -15,7 +18,7 @@ name: Sync text-to-cad
 # Rolling back a bad upstream release for everyone: set the repository variable
 # TEXT_TO_CAD_REF to an older tag (Settings > Secrets and variables > Actions >
 # Variables, e.g. v0.7.25) and run this workflow. Daily runs stay on that tag
-# until the variable is deleted.
+# until the variable is deleted. ANATOMY_REF does the same for Anatomy (e.g. v1.0.0).
 
 on:
   schedule:
@@ -24,6 +27,10 @@ on:
     inputs:
       ref:
         description: "Upstream branch or tag to sync (empty: TEXT_TO_CAD_REF variable, else latest)"
+        type: string
+        default: ""
+      anatomy_ref:
+        description: "Anatomy tag to sync (empty: ANATOMY_REF variable, else the newest release tag)"
         type: string
         default: ""
 
@@ -41,6 +48,7 @@ jobs:
     timeout-minutes: 30
     env:
       REF: ${{ inputs.ref || vars.TEXT_TO_CAD_REF || 'latest' }}
+      ANATOMY_REF: ${{ inputs.anatomy_ref || vars.ANATOMY_REF || 'release' }}
       TARGET: ${{ vars.TEXT_TO_CAD_BRANCH || 'text-to-cad' }}
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +59,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Merge main
         id: merge
@@ -70,6 +82,15 @@ jobs:
         id: sync
         run: python scripts/sync_text_to_cad.py --ref "$REF"
 
+      - name: Sync Anatomy from upstream
+        id: anatomy
+        run: |
+          if [ -f scripts/sync_anatomy.py ]; then
+            python scripts/sync_anatomy.py --ref "$ANATOMY_REF"
+          else
+            echo "scripts/sync_anatomy.py is not on $TARGET yet; skipping Anatomy."
+          fi
+
       - name: Detect changes
         id: diff
         run: |
@@ -79,14 +100,21 @@ jobs:
             echo "synced=false" >> "$GITHUB_OUTPUT"
             echo "text-to-cad is already at ${{ steps.sync.outputs.version }}"
           fi
+          if [ -n "$(git status --porcelain -- pillow_assistant/capabilities/skills/anatomy)" ]; then
+            echo "anatomy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "anatomy=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Test
-        if: steps.diff.outputs.synced == 'true' || steps.merge.outputs.merged == 'true'
+        if: steps.diff.outputs.synced == 'true' || steps.diff.outputs.anatomy == 'true' || steps.merge.outputs.merged == 'true'
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           pip install pytest pydantic litellm keyring numpy PySide6 uv
-          python -m pytest -q tests/test_text_to_cad.py tests/test_capabilities.py tests/test_windows_launcher.py
+          tests="tests/test_text_to_cad.py tests/test_capabilities.py tests/test_windows_launcher.py"
+          [ -f tests/test_anatomy.py ] && tests="$tests tests/test_anatomy.py"
+          python -m pytest -q $tests
 
       - name: Smoke-test the pinned cadgen runtime
         if: steps.diff.outputs.synced == 'true'
@@ -97,25 +125,32 @@ jobs:
           uvx $args python -c "import build123d, cadgen; print('cadgen ok')"
 
       - name: Commit and push
-        if: steps.diff.outputs.synced == 'true' || steps.merge.outputs.merged == 'true'
+        if: steps.diff.outputs.synced == 'true' || steps.diff.outputs.anatomy == 'true' || steps.merge.outputs.merged == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.sync.outputs.version }}
           PREVIOUS: ${{ steps.sync.outputs.previous }}
+          ANATOMY_VERSION: ${{ steps.anatomy.outputs.version }}
+          ANATOMY_PREVIOUS: ${{ steps.anatomy.outputs.previous }}
         run: |
           if [ "${{ steps.diff.outputs.synced }}" = "true" ]; then
             git add pillow_assistant/capabilities/skills/text_to_cad
             git commit -m "Sync text-to-cad ${PREVIOUS:-none} -> ${VERSION}" \
                        -m "Vendored from https://github.com/earthtojake/text-to-cad/tree/${REF} by scripts/sync_text_to_cad.py."
           fi
+          if [ "${{ steps.diff.outputs.anatomy }}" = "true" ]; then
+            git add pillow_assistant/capabilities/skills/anatomy
+            git commit -m "Sync Anatomy ${ANATOMY_PREVIOUS:-none} -> ${ANATOMY_VERSION}" \
+                       -m "Vendored from https://github.com/wheresryan22/anatomy by scripts/sync_anatomy.py."
+          fi
           if git push origin "HEAD:${TARGET}"; then
             echo "Pushed ${TARGET} (text-to-cad ${VERSION})"
           else
             # The branch is protected: hand the update over as a pull request instead.
-            branch="bot/text-to-cad-${VERSION}"
+            branch="bot/text-to-cad-${VERSION}-anatomy-${ANATOMY_VERSION:-none}"
             git push --force origin "HEAD:refs/heads/${branch}"
             gh pr create --base "$TARGET" --head "$branch" \
               --title "Sync text-to-cad ${VERSION}" \
-              --body "Automated sync of earthtojake/text-to-cad ${PREVIOUS:-none} -> ${VERSION} (plus main). Tests and the cadgen smoke test passed." \
+              --body "Automated sync of earthtojake/text-to-cad ${PREVIOUS:-none} -> ${VERSION} and wheresryan22/anatomy ${ANATOMY_PREVIOUS:-none} -> ${ANATOMY_VERSION:-unchanged} (plus main). Tests and the cadgen smoke test passed." \
               || echo "PR already exists"
           fi

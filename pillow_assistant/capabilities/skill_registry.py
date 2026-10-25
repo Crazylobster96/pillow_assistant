@@ -6,24 +6,26 @@ from importlib import resources
 from pathlib import Path
 from typing import Iterable, Optional
 
-from pillow_assistant.capabilities import text_to_cad
+from pillow_assistant.capabilities import anatomy, text_to_cad
 from pillow_assistant.capabilities.skill_loader import Skill, SkillStore, resolve_skill, resolve_skill_tools
 
 
 class CapabilitySkillRegistry:
-    """Load skills in increasing precedence: built-in, vendored text-to-cad, user, then project."""
+    """Load skills in increasing precedence: built-in, vendored text-to-cad and Anatomy, user, then project."""
 
     def __init__(
         self,
         *,
         built_in_root: Optional[str | Path] = None,
         text_to_cad_root: Optional[str | Path] = None,
+        anatomy_root: Optional[str | Path] = None,
         user_root: Optional[str | Path] = None,
         project_root: Optional[str | Path] = None,
     ) -> None:
         default_builtin = resources.files("pillow_assistant.capabilities").joinpath("skills", "builtin")
         self.built_in_root = Path(built_in_root) if built_in_root is not None else default_builtin
         self.text_to_cad_root = Path(text_to_cad_root) if text_to_cad_root is not None else text_to_cad.skills_root()
+        self.anatomy_root = Path(anatomy_root) if anatomy_root is not None else anatomy.skills_root()
         self.user_root = Path(user_root) if user_root is not None else Path.home() / ".pillow" / "skills"
         self.project_root = Path(project_root) if project_root is not None else None
         self._skills: list[Skill] = []
@@ -32,6 +34,7 @@ class CapabilitySkillRegistry:
         result: list[tuple[str, object]] = [
             ("builtin", self.built_in_root),
             (text_to_cad.SOURCE_KIND, self.text_to_cad_root),
+            (anatomy.SOURCE_KIND, self.anatomy_root),
             ("user", self.user_root),
         ]
         if self.project_root is not None:

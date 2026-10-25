@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pillow_assistant.capabilities import text_to_cad
+from pillow_assistant.capabilities import anatomy, text_to_cad
 from pillow_assistant.capabilities.prompt_registry import render_prompt
 from pillow_assistant.capabilities.tool_manifest import get_tool_manifest_registry
 from pillow_assistant.core.i18n import t
@@ -46,6 +46,9 @@ class SkillTool:
             # Upstream text is kept verbatim; tell the model how its commands map onto Pillow's tools.
             note = t("tool.skill.text_to_cad", version=text_to_cad.upstream_info().get("version", "?"),
                      name=Path(skill.source).parent.name if skill.source else skill.name)
+            instructions = note + "\n\n" + instructions
+        elif getattr(skill, "source_kind", "") == anatomy.SOURCE_KIND:
+            note = t("tool.skill.anatomy", version=anatomy.upstream_info().get("version", "?"))
             instructions = note + "\n\n" + instructions
         return ToolResult(ok=True, text=t("tool.skill.applied", name=skill.name,
                                           instructions=instructions))

@@ -1,0 +1,53 @@
+{
+  "name": "anatomy",
+  "version": "1.0.0",
+  "description": {
+    "zh": "Anatomy 等轴测讲解图：把一个技术概念做成一台真实的小机器（锁、量表、绘图仪、发动机……），输出可交互的 SVG/HTML 页面、单个 SVG、React 组件或 A4 PDF。先用 apply_skill 应用 anatomy 技能并按其指引编写 anatomy/figures/<名字>/build.mjs，再用本工具运行：action=\"run\" 在工作目录的 anatomy/ 下执行 `node <脚本> …`（构建、--audit 几何审计、scripts/capture.mjs 截图、drive.mjs、lines.mjs、print.mjs 打印 PDF）；action=\"open\" 在浏览器中打开做好的页面。经用户确认后执行；没有 Node.js 时首次运行会自动下载。",
+    "en": "Anatomy isometric explainer figures: turn a technical idea into a real little machine (a lock, a gauge, a plotter, an engine…) and output an interactive SVG/HTML page, a lone SVG, React components or A4 PDFs. Apply the anatomy skill with apply_skill first and write anatomy/figures/<name>/build.mjs as it instructs, then use this tool: action=\"run\" runs `node <script> …` in the workspace's anatomy/ folder (builds, --audit geometry checks, scripts/capture.mjs screenshots, drive.mjs, lines.mjs, print.mjs PDFs); action=\"open\" shows a finished page in the browser. Runs after user confirmation; downloads Node.js on first use when it is missing."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["run", "open"],
+          "description": "run：执行 node 脚本（默认）；open：在浏览器打开 path 指向的 .html/.svg/.pdf"
+        },
+        "args": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "run 时：node 之后的参数，第一个是 anatomy/ 下的脚本，如 [\"figures/lock/build.mjs\", \"--light\"] 或 [\"scripts/capture.mjs\", \"figures/lock/lock.html\", \"--out\", \"shots/lock.png\"]"
+        },
+        "path": {
+          "type": "string",
+          "description": "open 时：anatomy/ 下的页面，如 figures/lock/lock.html"
+        }
+      }
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["run", "open"],
+          "description": "run: run a node script (default); open: show the .html/.svg/.pdf at path in the browser"
+        },
+        "args": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "for run: arguments after node, starting with a script under anatomy/, e.g. [\"figures/lock/build.mjs\", \"--light\"] or [\"scripts/capture.mjs\", \"figures/lock/lock.html\", \"--out\", \"shots/lock.png\"]"
+        },
+        "path": {
+          "type": "string",
+          "description": "for open: a page under anatomy/, e.g. figures/lock/lock.html"
+        }
+      }
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}
