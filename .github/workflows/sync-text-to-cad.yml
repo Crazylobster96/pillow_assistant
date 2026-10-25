@@ -1,14 +1,21 @@
 name: Sync text-to-cad
 
-# Follows https://github.com/earthtojake/text-to-cad: its `latest` branch gets each
-# release once the matching cadgen is on PyPI. A new release is vendored into
-# pillow_assistant/capabilities/skills/text_to_cad/, tested, and pushed to main,
-# where the Windows bundle's updater and `pip install` users pick it up.
+# Maintains the `text-to-cad` branch: the Pillow edition with
+# https://github.com/earthtojake/text-to-cad built in. Every day it
+#   1. merges main into the branch, so it keeps every regular Pillow change, and
+#   2. vendors the newest upstream release (upstream's `latest` branch gets each
+#      release once the matching cadgen is on PyPI) into
+#      pillow_assistant/capabilities/skills/text_to_cad/,
+# tests, and pushes the branch. Windows bundles built from it follow the branch
+# (update.json), so they upgrade on their own.
+#
+# Scheduled runs use this file from the default branch, so a copy must live on
+# main; it always checks out TARGET below.
 #
 # Rolling back a bad upstream release for everyone: set the repository variable
 # TEXT_TO_CAD_REF to an older tag (Settings > Secrets and variables > Actions >
-# Variables, e.g. v0.7.25) and run this workflow. It vendors that tag, pushes it
-# to main, and daily runs stay on it. Delete the variable to follow `latest` again.
+# Variables, e.g. v0.7.25) and run this workflow. Daily runs stay on that tag
+# until the variable is deleted.
 
 on:
   schedule:
@@ -34,14 +41,30 @@ jobs:
     timeout-minutes: 30
     env:
       REF: ${{ inputs.ref || vars.TEXT_TO_CAD_REF || 'latest' }}
+      TARGET: ${{ vars.TEXT_TO_CAD_BRANCH || 'text-to-cad' }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ vars.TEXT_TO_CAD_BRANCH || 'text-to-cad' }}
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Merge main
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          before=$(git rev-parse HEAD)
+          if git merge --no-edit origin/main; then
+            echo "merged=$([ "$before" != "$(git rev-parse HEAD)" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::main does not merge cleanly into $TARGET; resolve it by hand. Syncing text-to-cad only."
+          fi
 
       - name: Sync from upstream
         id: sync
@@ -51,22 +74,22 @@ jobs:
         id: diff
         run: |
           if [ -n "$(git status --porcelain -- pillow_assistant/capabilities/skills/text_to_cad)" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "synced=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "synced=false" >> "$GITHUB_OUTPUT"
             echo "text-to-cad is already at ${{ steps.sync.outputs.version }}"
           fi
 
       - name: Test
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.synced == 'true' || steps.merge.outputs.merged == 'true'
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           pip install pytest pydantic litellm keyring numpy PySide6 uv
-          python -m pytest -q tests/test_text_to_cad.py tests/test_capabilities.py
+          python -m pytest -q tests/test_text_to_cad.py tests/test_capabilities.py tests/test_windows_launcher.py
 
       - name: Smoke-test the pinned cadgen runtime
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.synced == 'true'
         env:
           DO_NOT_TRACK: "1"
         run: |
@@ -74,25 +97,25 @@ jobs:
           uvx $args python -c "import build123d, cadgen; print('cadgen ok')"
 
       - name: Commit and push
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.synced == 'true' || steps.merge.outputs.merged == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.sync.outputs.version }}
           PREVIOUS: ${{ steps.sync.outputs.previous }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pillow_assistant/capabilities/skills/text_to_cad
-          git commit -m "Sync text-to-cad ${PREVIOUS:-none} -> ${VERSION}" \
-                     -m "Vendored from https://github.com/earthtojake/text-to-cad/tree/${REF} by scripts/sync_text_to_cad.py."
-          if git push origin HEAD:main; then
-            echo "Pushed text-to-cad ${VERSION} to main"
+          if [ "${{ steps.diff.outputs.synced }}" = "true" ]; then
+            git add pillow_assistant/capabilities/skills/text_to_cad
+            git commit -m "Sync text-to-cad ${PREVIOUS:-none} -> ${VERSION}" \
+                       -m "Vendored from https://github.com/earthtojake/text-to-cad/tree/${REF} by scripts/sync_text_to_cad.py."
+          fi
+          if git push origin "HEAD:${TARGET}"; then
+            echo "Pushed ${TARGET} (text-to-cad ${VERSION})"
           else
-            # main is protected: hand the update over as a pull request instead.
+            # The branch is protected: hand the update over as a pull request instead.
             branch="bot/text-to-cad-${VERSION}"
             git push --force origin "HEAD:refs/heads/${branch}"
-            gh pr create --base main --head "$branch" \
+            gh pr create --base "$TARGET" --head "$branch" \
               --title "Sync text-to-cad ${VERSION}" \
-              --body "Automated sync of earthtojake/text-to-cad ${PREVIOUS:-none} -> ${VERSION}. Tests and the cadgen smoke test passed." \
+              --body "Automated sync of earthtojake/text-to-cad ${PREVIOUS:-none} -> ${VERSION} (plus main). Tests and the cadgen smoke test passed." \
               || echo "PR already exists"
           fi

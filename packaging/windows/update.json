@@ -3,7 +3,7 @@
   "enabled": true,
   "repo": "Crazylobster96/pillow_assistant",
   "channel": "branch",
-  "branch": "main",
+  "branch": "text-to-cad",
   "check_interval_hours": 6,
   "startup_delay_seconds": 20,
   "timeout_seconds": 15,

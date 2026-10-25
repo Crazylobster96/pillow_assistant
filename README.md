@@ -102,6 +102,8 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 
 #### 文本生成 CAD（text-to-cad）
 
+> 这部分在 `text-to-cad` 分支单独维护（每天自动合并 main 并同步上游）；Windows 离线包见 Releases 里名字带 `text-to-cad` 的版本，它的自动升级跟随该分支。
+
 集成了 [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)：直接说「做一个 40×20×6 的安装支架，中间开 8mm 孔，导出 STEP 和 STL」「给这个零件出一张工程图」「把它切成拓竹 X1C 能打的 G-code」。Agent 会应用对应的 CAD 技能（`cad` / `dxf` / `engineering-drawing` / `dfm` / `dfam-check` / `gcode` / `step-parts` / `urdf` / `srdf` / `sdf` / `bambu-labs` / `sendcutsend`），在项目 workspace 写 build123d 参数化模型脚本，再用 `text_to_cad` 工具在固定版本的 cadgen 运行时里生成 STEP / STL / 3MF / GLB / DXF / PDF 等产物（每次执行前会请你确认）。
 
 - 运行时通过 [uv](https://docs.astral.sh/uv/) 获取（`pip install ".[cad]"` 即可，Windows 离线包已内置并预装好 cadgen，可离线建模）；cadgen 的遥测默认关闭。
@@ -255,6 +257,8 @@ Just say "show these two files side by side" — the Agent calls `present_window
 Dropped videos play right in the panel. Try: "this video is too big for the model — make it fit". The Agent probes duration/size, then splits into segments, compresses to a target size, or extracts evenly spaced frames for image-only vision models. Outputs land in the project workspace.
 
 #### Text-to-CAD (text-to-cad)
+
+> Maintained on the `text-to-cad` branch (main is merged in and upstream synced daily); its Windows bundles are the releases named `text-to-cad` and auto-update from that branch.
 
 Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad): ask "make a 40×20×6 mounting bracket with an 8 mm hole, export STEP and STL", "make an engineering drawing of this part", or "slice it to G-code for a Bambu X1C". The Agent applies the matching CAD skill (`cad`, `dxf`, `engineering-drawing`, `dfm`, `dfam-check`, `gcode`, `step-parts`, `urdf`, `srdf`, `sdf`, `bambu-labs`, `sendcutsend`), writes a build123d parametric model script in the project workspace, and runs it with the `text_to_cad` tool in the pinned cadgen runtime to produce STEP / STL / 3MF / GLB / DXF / PDF outputs (each run asks for confirmation).
 
