@@ -1,6 +1,6 @@
 ---
 name: cam
-description: Turn a text-to-cad part into a machine program (CAM). Use when the user wants G-code for a laser cutter or plasma table (from a DXF), or for a 3-axis CNC mill or router (from a STEP part). Turning and 4/5-axis toolpaths are not supported yet.
+description: Turn a text-to-cad part into a machine program (CAM). Use when the user wants G-code for a laser cutter or plasma table (from a DXF), or for a 3-axis or 3+2 indexed (4th-axis / trunnion) CNC mill or router (from a STEP part). Turning and simultaneous 5-axis toolpaths are not supported yet.
 tools: text_to_cam, cam_mill, file_write, file_read, apply_skill
 ---
 
@@ -21,8 +21,12 @@ The user loads the program on the machine themselves.
   drilling, adaptive finishing, an outline profile and 3D surfacing with a
   ball end mill. Controllers: `grbl`, `linuxcnc`, `fanuc`, `mach3`, `mach4`,
   `centroid`, `uccnc` and `heidenhain`.
-- Not yet supported: turning, 4-axis and 5-axis work (indexed 3+2 is
-  planned). Say so plainly. Do not write G-code by hand as a substitute.
+- `cam_mill` with `job.setups`: 3+2 indexed milling on a 4th axis (`A` or
+  `B`) or a trunnion (`AC` or `BC`). Each setup is machined as a 3-axis job
+  with the part turned, and gets its own program.
+- Not yet supported: turning and simultaneous 4/5-axis work (the tool moving
+  while the axes turn). Say so plainly. Do not write G-code by hand as a
+  substitute.
 
 ## Laser and plasma steps
 
@@ -94,3 +98,44 @@ The user loads the program on the machine themselves.
    and run the CAM simulator (or simulate the G-code in CAMotics), set work
    zero at the stock's front-left corner with Z0 on the stock top, set the
    tool length after every tool change, and dry run above the part first.
+
+## 3+2 indexed steps
+
+1. **Find out which rotary axes the machine has.** Ask; never assume.
+   - `machine.rotary.axes`: `A` (4th axis along X), `B` (along Y), `AC` or `BC`
+     (trunnion: a C table on a tilting A or B axis).
+   - `limits` such as `{"A": [-120, 120]}` for each axis that cannot turn freely.
+   - `signs` such as `{"A": -1}` if the axis turns the other way from the
+     right-hand rule turning the part. If the user does not know, say the
+     first run must check it with a slow test move.
+   - `center_height` (trunnion only): from the C table top to the tilt axis.
+   - `retract`: the line that lifts the tool before turning, `G53 G0 Z0` by
+     default. It must lift the tool clear of the swinging stock.
+   - `mode`: `table` (default) writes `G0 A..` moves. `tilted_plane` writes a
+     Fanuc `G68.2` plane, for Fanuc controls with that option or head-tilting
+     machines.
+   - Standard GRBL has only 3 axes; the A/B/C moves need grblHAL.
+2. **Plan the setups with the user.** Each setup is a direction the tool comes
+   from, in the part's own frame: `+Z` is the top, `+Y` the back, `-Z` the
+   bottom, `+X` the right end, or a vector such as `[0, 1, 1]`. On an A axis
+   only directions without an X part are reachable (B: without a Y part). You
+   can also give the angles directly (`{"A": 90}`). Give per-setup
+   `operations` when a side only needs, for example, drilling.
+3. **How the part is held.** Work zero is the rotary centre.
+   - A or B axis: the part is centred on the axis. `job.hold` is the stub
+     length in the chuck; X0 (B: Y0) is the jaw face and nothing is cut beyond
+     it. Each setup cuts down to the axis (`floor` 0) by default, so opposite
+     setups meet in the middle.
+   - Trunnion: the part sits centred on the C table and nothing is cut within
+     `skin` of the table.
+   - `job.offset` [x, y, z] moves the part off the centre when it is not
+     centred.
+4. **Run `cam_mill`** with `machine.rotary` and `job.setups`. It writes
+   `<name>_S1.nc`, `<name>_S2.nc` … (GRBL: one file per tool per setup), one
+   preview and one `.FCStd` project per setup, and one setup sheet.
+5. **Review it with the user.** Read out the swing radius: before every
+   rotation the tool tip must be higher than that above the rotary centre.
+   Read the other warnings too, especially flute length on side setups.
+6. **Hand it over** with this reminder: set work zero on the rotary centre,
+   check the rotary direction with a slow test move, simulate each setup's
+   `.FCStd` project, and dry run each setup with the spindle off.

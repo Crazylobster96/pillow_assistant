@@ -2,8 +2,8 @@
   "name": "cam_mill",
   "version": "1.0.0",
   "description": {
-    "zh": "3 轴 CNC 铣削 CAM：用 FreeCAD 的 CAM 工作台把 STEP 零件变成加工中心/雕刻机 G-code（面铣、自适应开粗与精加工、钻孔、外轮廓、3D 曲面），按控制器后处理（GRBL、LinuxCNC、Fanuc、Mach3/4 等），并检查毛坯/行程/刃长，生成预览图、加工单和可在 FreeCAD 里仿真的工程文件。首次使用自动下载安装 FreeCAD（约数百 MB）。先用 apply_skill 应用 cam 技能。经用户确认后执行，从不连接机床。",
-    "en": "3-axis CNC milling CAM: turn a STEP part into machining-center / router G-code with FreeCAD's CAM workbench (facing, adaptive roughing and finishing, drilling, outline profile, 3D surface), posted for the controller (GRBL, LinuxCNC, Fanuc, Mach3/4 and more), with stock / travel / flute-length checks, a preview, a setup sheet and a FreeCAD project to simulate. Installs FreeCAD on first use (several hundred MB). Apply the cam skill first with apply_skill. Runs after user confirmation and never connects to a machine."
+    "zh": "3 轴与 3+2 定轴（第四轴/摇篮）CNC 铣削 CAM：用 FreeCAD 的 CAM 工作台把 STEP 零件变成加工中心/雕刻机 G-code（面铣、自适应开粗与精加工、钻孔、外轮廓、3D 曲面），按控制器后处理（GRBL、LinuxCNC、Fanuc、Mach3/4 等），并检查毛坯/行程/刃长，生成预览图、加工单和可在 FreeCAD 里仿真的工程文件。首次使用自动下载安装 FreeCAD（约数百 MB）。先用 apply_skill 应用 cam 技能。经用户确认后执行，从不连接机床。",
+    "en": "3-axis and 3+2 indexed (4th-axis / trunnion) CNC milling CAM: turn a STEP part into machining-center / router G-code with FreeCAD's CAM workbench (facing, adaptive roughing and finishing, drilling, outline profile, 3D surface), posted for the controller (GRBL, LinuxCNC, Fanuc, Mach3/4 and more), with stock / travel / flute-length checks, a preview, a setup sheet and a FreeCAD project to simulate. Installs FreeCAD on first use (several hundred MB). Apply the cam skill first with apply_skill. Runs after user confirmation and never connects to a machine."
   },
   "parameters": {
     "zh": {
@@ -11,7 +11,7 @@
       "properties": {
         "input": {
           "type": "string",
-          "description": "工作目录内的 STEP 零件（.step/.stp），Z 向上为加工方向，按零件实际尺寸 mm"
+          "description": "工作目录内的 STEP 零件（.step/.stp），Z 向上为加工方向（定轴加工时各工位方向由 setups 给出），按零件实际尺寸 mm"
         },
         "output": {
           "type": "string",
@@ -19,7 +19,7 @@
         },
         "machine": {
           "type": "object",
-          "description": "机床：controller（grbl / linuxcnc / fanuc / mach3 / mach4 / centroid / uccnc / heidenhain）、travel [x,y,z] 行程 mm、max_rpm、max_feed、rapid、tool_change（manual 则按刀分文件）、name"
+          "description": "机床：controller（grbl / linuxcnc / fanuc / mach3 / mach4 / centroid / uccnc / heidenhain）、travel [x,y,z] 行程 mm、max_rpm、max_feed、rapid、tool_change（manual 则按刀分文件）、name；多工位定轴加工还需 rotary {axes: A / B / AC / BC, mode: table（默认，输出 A/B/C 旋转）或 tilted_plane（仅 Fanuc，G68.2）, limits {\"A\": [最小, 最大]}, signs {\"A\": -1 方向相反时}, center_height 摇篮转台面到倾斜轴的距离, retract 旋转前抬刀行（默认 G53 G0 Z0）}"
         },
         "machine_file": {
           "type": "string",
@@ -27,7 +27,7 @@
         },
         "job": {
           "type": "object",
-          "description": "本次加工：stock {xy 四周余量, top 顶面余量, bottom 底部多出的料} mm（必填）、tools（必填）、operations（可省，默认：面铣→自适应开粗→钻孔→自适应精加工→球头曲面精加工；每项 {type: face/rough/finish/profile/drill/surface/waterline, tool, stepover %, stepdown, stock_to_leave}）、finish_allowance 精加工余量（默认 0.3）、skin 底部无余量时保留的连皮（默认 0.3）、safe_height、clearance_height、allow_below_stock。刀具列表，每把：number 刀号、type（endmill 平底 / ballend 球头 / bullnose 圆鼻 / drill 钻头 / chamfer 倒角 / v-bit）、diameter 直径 mm、rpm 转速、feed 进给 mm/min、plunge 下刀 mm/min、stepdown 每层切深 mm（钻头不用），可选 flute_length 刃长、length 伸出长、flutes 刃数、peck 啄钻深度、tip_angle 钻尖角、name。转速、进给、切深必须来自用户，不得猜测"
+          "description": "本次加工：stock {xy 四周余量, top 顶面余量, bottom 底部多出的料} mm（必填）、tools（必填）、operations（可省，默认：面铣→自适应开粗→钻孔→自适应精加工→球头曲面精加工；每项 {type: face/rough/finish/profile/drill/surface/waterline, tool, stepover %, stepdown, stock_to_leave}）、finish_allowance 精加工余量（默认 0.3）、skin 底部无余量时保留的连皮（默认 0.3）、safe_height、clearance_height、allow_below_stock。刀具列表，每把：number 刀号、type（endmill 平底 / ballend 球头 / bullnose 圆鼻 / drill 钻头 / chamfer 倒角 / v-bit）、diameter 直径 mm、rpm 转速、feed 进给 mm/min、plunge 下刀 mm/min、stepdown 每层切深 mm（钻头不用），可选 flute_length 刃长、length 伸出长、flutes 刃数、peck 啄钻深度、tip_angle 钻尖角、name。转速、进给、切深必须来自用户，不得猜测。3+2 定轴：setups 列表，每个工位 {name, direction 刀具来向（+X/-X/+Y/-Y/+Z/-Z 或 [x,y,z]）或直接给 A/B/C 角度, operations（可省）, floor 最深 Z（A/B 轴默认 0，即旋转轴线）}；hold 卡盘夹持的料头长度 mm（A/B 轴）；offset [x,y,z] 零件相对旋转中心的偏移。工件零点为旋转中心，每个工位一个程序"
         },
         "job_file": {
           "type": "string",
@@ -43,7 +43,7 @@
       "properties": {
         "input": {
           "type": "string",
-          "description": "a STEP part in the workspace (.step/.stp), machined from +Z, real size in mm"
+          "description": "a STEP part in the workspace (.step/.stp), machined from +Z (or from each setup's direction with setups), real size in mm"
         },
         "output": {
           "type": "string",
@@ -51,7 +51,7 @@
         },
         "machine": {
           "type": "object",
-          "description": "machine: controller (grbl / linuxcnc / fanuc / mach3 / mach4 / centroid / uccnc / heidenhain), travel [x,y,z] mm, max_rpm, max_feed, rapid, tool_change (manual splits files per tool), name"
+          "description": "machine: controller (grbl / linuxcnc / fanuc / mach3 / mach4 / centroid / uccnc / heidenhain), travel [x,y,z] mm, max_rpm, max_feed, rapid, tool_change (manual splits files per tool), name; indexed setups also need rotary {axes: A / B / AC / BC, mode: table (default, writes A/B/C moves) or tilted_plane (Fanuc only, G68.2), limits {\"A\": [min, max]}, signs {\"A\": -1 when it turns the other way}, center_height from the trunnion table top to the tilt axis, retract line before each rotation (default G53 G0 Z0)}"
         },
         "machine_file": {
           "type": "string",
@@ -59,7 +59,7 @@
         },
         "job": {
           "type": "object",
-          "description": "this job: stock {xy margin each side, top, bottom extra material} mm (required), tools (required), operations (optional; default face → adaptive rough → drill → adaptive finish → ball-end surface; each {type: face/rough/finish/profile/drill/surface/waterline, tool, stepover %, stepdown, stock_to_leave}), finish_allowance (default 0.3), skin left when there is no bottom stock (default 0.3), safe_height, clearance_height, allow_below_stock. tools, each: number, type (endmill / ballend / bullnose / drill / chamfer / v-bit), diameter mm, rpm, feed mm/min, plunge mm/min, stepdown mm per pass (not for drills); optional flute_length, length (stick-out), flutes, peck, tip_angle, name. Speeds, feeds and depths of cut must come from the user, never guessed"
+          "description": "this job: stock {xy margin each side, top, bottom extra material} mm (required), tools (required), operations (optional; default face → adaptive rough → drill → adaptive finish → ball-end surface; each {type: face/rough/finish/profile/drill/surface/waterline, tool, stepover %, stepdown, stock_to_leave}), finish_allowance (default 0.3), skin left when there is no bottom stock (default 0.3), safe_height, clearance_height, allow_below_stock. tools, each: number, type (endmill / ballend / bullnose / drill / chamfer / v-bit), diameter mm, rpm, feed mm/min, plunge mm/min, stepdown mm per pass (not for drills); optional flute_length, length (stick-out), flutes, peck, tip_angle, name. Speeds, feeds and depths of cut must come from the user, never guessed. 3+2 indexed: setups, a list of {name, direction the tool comes from (+X/-X/+Y/-Y/+Z/-Z or [x,y,z]) or the A/B/C angles, operations (optional), floor deepest Z (A/B axes default 0, the rotary axis)}; hold, the stub length held in the chuck in mm (A/B axes); offset [x,y,z] of the part from the rotary centre. Work zero is the rotary centre; one program per setup"
         },
         "job_file": {
           "type": "string",

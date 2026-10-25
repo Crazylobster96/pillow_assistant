@@ -58,26 +58,44 @@ def run(spec, report):
         model = solids[0]
     doc.recompute()
 
-    # optimalBoundingBox is tight on curved faces; BoundBox can be several mm loose there.
-    bb = model.Shape.optimalBoundingBox()
     st = spec["stock"]
-    sx0, sy0 = bb.XMin - st["xy"], bb.YMin - st["xy"]
-    sz_top = bb.ZMax + st["top"]
-    # Work zero: stock lower-left corner in XY, stock top in Z.
-    shift = FreeCAD.Vector(-sx0, -sy0, -sz_top)
-    model.Placement = FreeCAD.Placement(model.Placement.Base + shift, model.Placement.Rotation)
-    doc.recompute()
-    bb = model.Shape.optimalBoundingBox()
-    report["model"] = [bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax]
+    indexed = spec.get("indexed")
+    keep = None
+    if indexed:
+        stock_shape, keep = place_indexed(model, st, indexed, doc)
+        job = PathJob.Create("Job", [model])
+        clone = job.Model.Group[0]
+        old = job.Stock
+        stock_obj = doc.addObject("Part::Feature", "IndexedStock")
+        stock_obj.Shape = stock_shape
+        job.Stock = stock_obj
+        if old:
+            doc.removeObject(old.Name)
+        doc.recompute()
+        bb = model.Shape.optimalBoundingBox()
+        report["model"] = [bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax]
+        sb = stock_shape.BoundBox
+        report["stock"] = [sb.XMin, sb.YMin, sb.ZMin, sb.XMax, sb.YMax, sb.ZMax]
+    else:
+        # optimalBoundingBox is tight on curved faces; BoundBox can be several mm loose there.
+        bb = model.Shape.optimalBoundingBox()
+        sx0, sy0 = bb.XMin - st["xy"], bb.YMin - st["xy"]
+        sz_top = bb.ZMax + st["top"]
+        # Work zero: stock lower-left corner in XY, stock top in Z.
+        shift = FreeCAD.Vector(-sx0, -sy0, -sz_top)
+        model.Placement = FreeCAD.Placement(model.Placement.Base + shift, model.Placement.Rotation)
+        doc.recompute()
+        bb = model.Shape.optimalBoundingBox()
+        report["model"] = [bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax]
 
-    job = PathJob.Create("Job", [model])
-    clone = job.Model.Group[0]
-    if job.Stock:
-        doc.removeObject(job.Stock.Name)
-    size = FreeCAD.Vector(bb.XLength + 2 * st["xy"], bb.YLength + 2 * st["xy"], bb.ZLength + st["top"] + st["bottom"])
-    job.Stock = PathStock.CreateBox(job, size, FreeCAD.Placement(FreeCAD.Vector(0, 0, -size.z), FreeCAD.Rotation()))
-    doc.recompute()
-    report["stock"] = [0.0, 0.0, -size.z, size.x, size.y, 0.0]
+        job = PathJob.Create("Job", [model])
+        clone = job.Model.Group[0]
+        if job.Stock:
+            doc.removeObject(job.Stock.Name)
+        size = FreeCAD.Vector(bb.XLength + 2 * st["xy"], bb.YLength + 2 * st["xy"], bb.ZLength + st["top"] + st["bottom"])
+        job.Stock = PathStock.CreateBox(job, size, FreeCAD.Placement(FreeCAD.Vector(0, 0, -size.z), FreeCAD.Rotation()))
+        doc.recompute()
+        report["stock"] = [0.0, 0.0, -size.z, size.x, size.y, 0.0]
 
     ss = job.SetupSheet
     ss.SafeHeightOffset = f"{spec['safe_height']} mm"
@@ -114,7 +132,10 @@ def run(spec, report):
     doc.recompute()
 
     floor = report["model"][2]
-    if st["bottom"] <= 0:
+    if indexed:
+        if indexed.get("floor") is not None:
+            floor = max(floor, indexed["floor"])
+    elif st["bottom"] <= 0:
         floor += spec["skin"]  # leave a skin so a through-cut part stays attached to the sheet
 
     # Headless FreeCAD cannot ask which tool controller a new operation gets when there are
@@ -128,6 +149,23 @@ def run(spec, report):
         if op is not None:
             ops.append((o, op))
     doc.recompute()
+    if keep is not None:
+        # Clip every operation to the region that may be cut (not the chucked stub or the table).
+        import Path.Dressup.Boundary as PathBoundary
+        clipped = []
+        for o, op in ops:
+            d = PathBoundary.Create(op, f"{op.Label} keep")
+            old = d.Stock
+            region = doc.addObject("Part::Feature", f"Keep{len(clipped)}")
+            region.Shape = keep
+            d.Stock = region
+            d.Inside = True
+            if old:
+                doc.removeObject(old.Name)
+            d.Label = op.Label
+            clipped.append((o, d))
+        ops = clipped
+        doc.recompute()
 
     for o, op in ops:
         moves = []
@@ -149,6 +187,9 @@ def run(spec, report):
                 moves += [[0, x, y, last["Z"]], [0, x, y, r], [1, x, y, p.get("Z", r)], [0, x, y, r]]
                 last = {"X": x, "Y": y, "Z": r}
         cycle = getattr(op, "CycleTime", "")
+        if not str(cycle).strip():  # dressups have no CycleTime: estimate from the moves
+            tool = next(t for t in spec["tools"] if t["number"] == o["tool"])
+            cycle = estimate_time(moves, tool, spec.get("rapid") or 5000.0)
         report["operations"].append({"name": o["type"], "label": op.Label, "tool": o["tool"],
                                      "moves": moves, "cycle_time": str(cycle),
                                      "empty": not any(m[0] == 1 for m in moves)})
@@ -182,6 +223,66 @@ def run(spec, report):
     if spec.get("save_project"):
         doc.saveAs(spec["save_project"])
         report["project"] = spec["save_project"]
+
+
+def place_indexed(model, st, ix, doc):
+    """Put the model where it sits on the rotary axes, then turn it into this setup's tool frame.
+
+    Work zero is the rotary centre.  A axis (about X): the part's Y/Z centre on the axis,
+    X0 at the chuck jaw face, the stub held in the chuck from X-hold to X0 (never cut).  B axis: the same with X and Y swapped.  Trunnion
+    (AC/BC): the part centred on the C table, whose top is ``center_height`` below the tilt
+    axis.  Returns (stock solid, region that may be cut) in the rotated frame.
+    """
+    import FreeCAD
+    import Part
+
+    bb = model.Shape.optimalBoundingBox()
+    hold = ix.get("hold", 0.0)
+    m = ix["mount"]
+    if m == "A":
+        t = FreeCAD.Vector(st["xy"] - bb.XMin, -(bb.YMin + bb.YMax) / 2, -(bb.ZMin + bb.ZMax) / 2)
+    elif m == "B":
+        t = FreeCAD.Vector(-(bb.XMin + bb.XMax) / 2, st["xy"] - bb.YMin, -(bb.ZMin + bb.ZMax) / 2)
+    else:
+        table = -ix.get("center_height", 0.0)
+        t = FreeCAD.Vector(-(bb.XMin + bb.XMax) / 2, -(bb.YMin + bb.YMax) / 2, table + st["bottom"] - bb.ZMin)
+    if ix.get("offset"):
+        t = t + FreeCAD.Vector(*ix["offset"])
+    x0, y0, z0 = bb.XMin + t.x - st["xy"], bb.YMin + t.y - st["xy"], bb.ZMin + t.z - st["bottom"]
+    x1, y1, z1 = bb.XMax + t.x + st["xy"], bb.YMax + t.y + st["xy"], bb.ZMax + t.z + st["top"]
+    big = 10000.0
+    if m == "A":
+        x0 -= hold
+        keep = Part.makeBox(big, 2 * big, 2 * big, FreeCAD.Vector(0, -big, -big))
+    elif m == "B":
+        y0 -= hold
+        keep = Part.makeBox(2 * big, big, 2 * big, FreeCAD.Vector(-big, 0, -big))
+    else:
+        keep = Part.makeBox(2 * big, 2 * big, big, FreeCAD.Vector(-big, -big, z0 + ix.get("skin", 0.3)))
+    stock = Part.makeBox(x1 - x0, y1 - y0, z1 - z0, FreeCAD.Vector(x0, y0, z0))
+    r = ix["rotation"]
+    mat = FreeCAD.Matrix(r[0][0], r[0][1], r[0][2], 0, r[1][0], r[1][1], r[1][2], 0,
+                         r[2][0], r[2][1], r[2][2], 0, 0, 0, 0, 1)
+    rot = FreeCAD.Placement(mat).Rotation
+    model.Placement = FreeCAD.Placement(FreeCAD.Vector(), rot).multiply(
+        FreeCAD.Placement(t, FreeCAD.Rotation()).multiply(model.Placement))
+    doc.recompute()
+    to_frame = FreeCAD.Placement(FreeCAD.Vector(), rot).toMatrix()
+    return stock.transformGeometry(to_frame), keep.transformGeometry(to_frame)
+
+
+def estimate_time(moves, tool, rapid):
+    """HH:MM:SS for the moves: plunges at the plunge feed, other cuts at the feed, rapids at ``rapid``."""
+    sec, prev = 0.0, None
+    for m in moves:
+        if prev is not None:
+            dxy = math.hypot(m[1] - prev[1], m[2] - prev[2])
+            dist = math.hypot(dxy, m[3] - prev[3])
+            rate = rapid if m[0] == 0 else (tool["plunge"] if dxy < 1e-6 else tool["feed"])
+            sec += dist / rate * 60
+        prev = m
+    s = int(round(sec))
+    return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
 def arc_moves(a, b, p, cw):

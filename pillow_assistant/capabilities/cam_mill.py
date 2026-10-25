@@ -115,39 +115,7 @@ def build_spec(machine: dict, job: dict) -> dict:
     ops = job.get("operations") or default_operations(tools, stock, allowance)
     if not ops:
         raise CamError("no operations: add an endmill or a drill to job.tools")
-    checked = []
-    for i, o in enumerate(ops, 1):
-        if not isinstance(o, dict):
-            raise CamError(f"operation {i} must be an object")
-        kind = str(o.get("type") or "").lower()
-        if kind not in OPERATIONS:
-            raise CamError(f"operation {i}: type must be one of {', '.join(sorted(OPERATIONS))}")
-        try:
-            tool = by_number[int(o.get("tool"))]
-        except (TypeError, ValueError, KeyError):
-            raise CamError(f"operation {i} ({kind}): tool must be one of the job's tool numbers") from None
-        if (kind == "drill") != (tool["shape"] == "drill"):
-            raise CamError(f"operation {i} ({kind}) cannot use T{tool['number']} ({tool['shape']})")
-        if kind in ("surface", "waterline") and tool["shape"] not in ("ballend", "bullnose", "endmill"):
-            raise CamError(f"operation {i} ({kind}) needs a ball, bull-nose or flat end mill")
-        op = {"type": kind, "tool": tool["number"]}
-        defaults = {"face": 60, "rough": 20, "finish": 20, "surface": 10, "waterline": 10, "profile": 50}
-        if kind != "drill":
-            op["stepover"] = _num(o, "stepover", f"operation {i}", positive=True) or defaults[kind]
-            if op["stepover"] > 100:
-                raise CamError(f"operation {i}: stepover is a percentage of the tool diameter (<= 100)")
-            op["stepdown"] = _num(o, "stepdown", f"operation {i}", positive=True) or tool["stepdown"]
-        else:
-            op["diameter"] = tool["diameter"]
-            if o.get("peck") is not None or tool.get("peck"):
-                op["peck"] = _num(o, "peck", f"operation {i}", positive=True) or tool["peck"]
-        if kind == "rough":
-            op["stock_to_leave"] = _num(o, "stock_to_leave", f"operation {i}", minimum=0)
-            if op["stock_to_leave"] is None:
-                op["stock_to_leave"] = allowance
-        if kind == "profile":
-            op["climb"] = bool(o.get("climb", True))
-        checked.append(op)
+    checked = check_operations(ops, by_number, allowance)
 
     skin = _num(job, "skin", "job", minimum=0)
     return {
@@ -162,6 +130,45 @@ def build_spec(machine: dict, job: dict) -> dict:
         "machine": {"travel": travel, "max_rpm": max_rpm, "max_feed": max_feed, "name": str(machine.get("name") or "")},
         "allow_below_stock": bool(job.get("allow_below_stock", False)),
     }
+
+
+def check_operations(ops: list, by_number: dict, allowance: float, where: str = "") -> list[dict]:
+    """Validate operations against the job's tools; fills in default stepover / stepdown."""
+    checked = []
+    for i, o in enumerate(ops, 1):
+        if not isinstance(o, dict):
+            raise CamError(f"{where}operation {i} must be an object")
+        kind = str(o.get("type") or "").lower()
+        if kind not in OPERATIONS:
+            raise CamError(f"{where}operation {i}: type must be one of {', '.join(sorted(OPERATIONS))}")
+        try:
+            tool = by_number[int(o.get("tool"))]
+        except (TypeError, ValueError, KeyError):
+            raise CamError(f"{where}operation {i} ({kind}): tool must be one of the job's tool numbers") from None
+        if (kind == "drill") != (tool["shape"] == "drill"):
+            raise CamError(f"{where}operation {i} ({kind}) cannot use T{tool['number']} ({tool['shape']})")
+        if kind in ("surface", "waterline") and tool["shape"] not in ("ballend", "bullnose", "endmill"):
+            raise CamError(f"{where}operation {i} ({kind}) needs a ball, bull-nose or flat end mill")
+        op = {"type": kind, "tool": tool["number"]}
+        defaults = {"face": 60, "rough": 20, "finish": 20, "surface": 10, "waterline": 10, "profile": 50}
+        if kind != "drill":
+            op["stepover"] = _num(o, "stepover", f"operation {i}", positive=True) or defaults[kind]
+            if op["stepover"] > 100:
+                raise CamError(f"{where}operation {i}: stepover is a percentage of the tool diameter (<= 100)")
+            op["stepdown"] = _num(o, "stepdown", f"operation {i}", positive=True) or tool["stepdown"]
+        else:
+            op["diameter"] = tool["diameter"]
+            if o.get("peck") is not None or tool.get("peck"):
+                op["peck"] = _num(o, "peck", f"operation {i}", positive=True) or tool["peck"]
+        if kind == "rough":
+            op["stock_to_leave"] = _num(o, "stock_to_leave", f"operation {i}", minimum=0)
+            if op["stock_to_leave"] is None:
+                op["stock_to_leave"] = allowance
+        if kind == "profile":
+            op["climb"] = bool(o.get("climb", True))
+        checked.append(op)
+
+    return checked
 
 
 def default_operations(tools: list[dict], stock: dict, allowance: float) -> list[dict]:
@@ -352,6 +359,9 @@ def total_minutes(report: dict) -> float:
 def mill(src: Path, out: Path, machine: dict, job: dict, freecad: list[str], *,
          runner: Optional[Callable] = None) -> dict:
     """STEP -> programs, preview, setup sheet and FreeCAD project next to ``out``; raises CamError."""
+    if (job or {}).get("setups"):
+        from pillow_assistant.capabilities import cam_indexed
+        return cam_indexed.mill_indexed(src, out, machine, job, freecad, runner=runner)
     spec = build_spec(machine, job)
     out.parent.mkdir(parents=True, exist_ok=True)
     project = out.with_suffix(".FCStd")
@@ -369,5 +379,6 @@ def mill(src: Path, out: Path, machine: dict, job: dict, freecad: list[str], *,
     names = [f.name for f in files] + [project.name]
     sheet.write_text(setup_sheet(spec, report, names, warnings, str(src)), "utf-8")
     return {"programs": [str(f) for f in files], "preview": str(preview), "sheet": str(sheet),
-            "project": str(project) if project.is_file() else "", "warnings": warnings,
+            "project": str(project) if project.is_file() else "", "projects": [str(project)] if project.is_file() else [],
+            "previews": [str(preview)], "warnings": warnings,
             "minutes": total_minutes(report), "operations": [o["label"].strip("_") for o in report["operations"]]}

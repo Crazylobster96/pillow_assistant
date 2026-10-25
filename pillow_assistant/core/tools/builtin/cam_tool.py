@@ -6,6 +6,8 @@ in-process with the standard library and only writes inside the workspace.
 
 ``cam_mill`` turns a STEP part into 3-axis CNC milling programs through FreeCAD's
 CAM workbench (``capabilities/cam_mill.py``), installing FreeCAD on first use.
+With ``job.setups`` it writes one program per 3+2 / 4th-axis indexed setup
+(``capabilities/cam_indexed.py``).
 It runs an external program, so like cad_app it is SYSTEM permission.
 
 Neither connects to a machine.
@@ -127,7 +129,11 @@ class CamMillTool:
         try:
             machine = _settings(ctx, args, "machine")
             job = _settings(ctx, args, "job")
-            cam_mill.build_spec(machine, job)  # fail fast, before any download
+            if job.get("setups"):  # fail fast, before any download
+                from pillow_assistant.capabilities import cam_indexed
+                cam_indexed.plan_setups(machine, job)
+            else:
+                cam_mill.build_spec(machine, job)
         except cam2d.CamError as exc:
             return ToolResult(ok=False, text=t("tool.cam.failed", err=exc))
 
@@ -153,12 +159,13 @@ class CamMillTool:
             path = Path(p).resolve()
             return path.relative_to(root).as_posix() if _under(root, path) else str(path)
 
-        files = [rel(p) for p in result["programs"]] + [rel(result["preview"]), rel(result["sheet"])]
-        if result["project"]:
-            files.append(rel(result["project"]))
+        previews = result.get("previews") or [result["preview"]]
+        projects = result.get("projects") or ([result["project"]] if result["project"] else [])
+        files = ([rel(p) for p in result["programs"]] + [rel(p) for p in previews] + [rel(result["sheet"])]
+                 + [rel(p) for p in projects])
         lines = [t("tool.cam.milled", programs=", ".join(rel(p) for p in result["programs"]),
-                   preview=rel(result["preview"]), sheet=rel(result["sheet"]),
-                   project=rel(result["project"]) if result["project"] else "-",
+                   preview=", ".join(rel(p) for p in previews), sheet=rel(result["sheet"]),
+                   project=", ".join(rel(p) for p in projects) or "-",
                    ops=", ".join(result["operations"]), minutes=f"{result['minutes']:.0f}")]
         if result["warnings"]:
             lines.append(t("tool.cam.warnings") + "\n" + "\n".join(f"- {w}" for w in result["warnings"]))
