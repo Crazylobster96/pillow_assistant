@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType
 from pillow_assistant.core import references
 from pillow_assistant.core.agent.loop import ToolLoopAgent
+from pillow_assistant.core.cad_intent import mentions_cad
 from pillow_assistant.core.i18n import t
 from pillow_assistant.core.model_router import select_model
 from pillow_assistant.core.observability import AuditLog
@@ -36,6 +37,17 @@ def _is_resume_request(prompt: str) -> bool:
     if text in {"继续", "继续执行", "接着做", "恢复", "恢复任务", "resume", "continue"}:
         return True
     return text.startswith(("继续上次", "继续刚才", "resume ", "continue "))
+
+
+def _inherited_context(project) -> str:
+    """Tell the Agent which files came from the projects this one builds on."""
+    lines = []
+    for entry in project.inherited:
+        files = list(entry.get("files") or [])
+        shown = ", ".join(files[:40]) + (f" … (+{len(files) - 40})" if len(files) > 40 else "")
+        lines.append(t("core.inherited_entry", name=entry.get("name", ""), id=entry.get("id", ""),
+                       files=shown or "-"))
+    return t("core.inherited_context") + "\n" + "\n".join(lines)
 
 
 class Orchestrator:
@@ -250,6 +262,13 @@ class Orchestrator:
         else:
             note = t("core.project_note", name=project.name) + (
                 t("core.project_continue") if tr.action == "continue" else t("core.project_new"))
+        if tr.rationale == "user-project":
+            note += t("core.project_by_user")
+        elif tr.action == "new" and mentions_cad(request.prompt):
+            note += t("core.project_name_hint")
+        inherited = next((e for e in project.inherited if e.get("id") == tr.inherit_from), None)
+        if inherited is not None:
+            note += t("core.project_inherited", name=inherited.get("name", ""), n=len(inherited.get("files") or []))
         await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=note + "\n"))
 
         audit = AuditLog(project.root / "audit.jsonl")
@@ -271,6 +290,8 @@ class Orchestrator:
                     ) + memory_ctx.rendered_context
             except Exception:
                 memory_ctx = None
+        if project.inherited:
+            final_context = ((final_context + "\n\n") if final_context else "") + _inherited_context(project)
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
                             request_id=request.id, project_id=project.id, project_root=project.root)
         resume_key = (project.id, session_id)

@@ -46,6 +46,17 @@ class ProjectManager:
         return project
 
     def apply(self, triage_result, prompt: str) -> Project:
+        """Resolve a project + session from a triage decision (see
+        ``_resolve``), then copy in the outputs of the project it builds on
+        (``triage_result.inherit_from``), if any."""
+        project = self._resolve(triage_result, prompt)
+        parent_id = getattr(triage_result, "inherit_from", None)
+        parent = self.store.get(parent_id) if parent_id and parent_id != project.id else None
+        if parent is not None:
+            self.store.inherit(project, parent)
+        return project
+
+    def _resolve(self, triage_result, prompt: str) -> Project:
         """Resolve a project + session from a triage decision (continue an
         existing project or create a new one), binding both to the session.
 

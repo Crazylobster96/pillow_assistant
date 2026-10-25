@@ -14,14 +14,20 @@ Layout per project::
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 HISTORY_MAX_TURNS = 12
 HISTORY_MAX_CHARS = 6000
+
+# Not carried over when a project inherits another's workspace: runtimes and
+# caches, and Anatomy's vendored kit/scripts (re-created by the anatomy tool).
+INHERIT_SKIP_DIRS = {"__pycache__", "node_modules", ".venv", "venv", ".cache"}
+INHERIT_SKIP_PATHS = {("anatomy", "kit"), ("anatomy", "scripts"), ("anatomy", ".pillow-anatomy.json")}
 
 
 @dataclass
@@ -33,6 +39,8 @@ class Project:
     updated_at: float
     last_prompt: str = ""
     unfinished: bool = False   # last run hit the step limit (work left to resume)
+    # Projects whose outputs were copied in to build on: [{"id","name","files"}].
+    inherited: list = field(default_factory=list)
 
     @property
     def workspace(self) -> Path:
@@ -69,7 +77,8 @@ class ProjectStore:
             json.dumps(
                 {"id": project.id, "name": project.name,
                  "created_at": project.created_at, "updated_at": project.updated_at,
-                 "last_prompt": project.last_prompt, "unfinished": project.unfinished},
+                 "last_prompt": project.last_prompt, "unfinished": project.unfinished,
+                 "inherited": project.inherited},
                 ensure_ascii=False, indent=2,
             ),
             encoding="utf-8",
@@ -87,6 +96,7 @@ class ProjectStore:
             id=data["id"], name=data.get("name", data["id"]), root=root,
             created_at=data.get("created_at", 0.0), updated_at=data.get("updated_at", 0.0),
             last_prompt=data.get("last_prompt", ""), unfinished=bool(data.get("unfinished", False)),
+            inherited=list(data.get("inherited") or []),
         )
 
     def get(self, project_id: Optional[str]) -> Optional[Project]:
@@ -133,6 +143,33 @@ class ProjectStore:
             return True
         except OSError:
             return False
+
+    def inherit(self, project: Project, source: Project) -> list[str]:
+        """Copy ``source``'s workspace outputs into ``project``'s workspace so
+        work can continue from them (e.g. CAM or an Anatomy figure on a CAD
+        project's model). Existing files are never overwritten; files are
+        copied, not linked, so later edits never reach the source project.
+        Returns the copied paths relative to the workspace."""
+        src_root, dst_root = source.workspace, project.workspace
+        copied: list[str] = []
+        if src_root.is_dir() and source.id != project.id:
+            for path in sorted(src_root.rglob("*")):
+                rel = path.relative_to(src_root)
+                parts = rel.parts
+                if (any(part in INHERIT_SKIP_DIRS or part.startswith(".") for part in parts[:-1])
+                        or any(parts[:len(skip)] == skip for skip in INHERIT_SKIP_PATHS)
+                        or not path.is_file() or path.is_symlink()):
+                    continue
+                target = dst_root / rel
+                if target.exists():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+                copied.append(rel.as_posix())
+        project.inherited = [e for e in project.inherited if e.get("id") != source.id] + [
+            {"id": source.id, "name": source.name, "files": copied, "at": time.time()}]
+        self._write(project)
+        return copied
 
     def find_by_name(self, name: str) -> list[Project]:
         """Projects whose name matches ``name`` (exact first, else substring)."""

@@ -25,7 +25,12 @@ def build_default_registry() -> ToolRegistry:
     from pillow_assistant.core.tools.builtin.http_tool import HttpRequestTool
     from pillow_assistant.core.tools.builtin.present_tool import PresentTool
     from pillow_assistant.core.tools.builtin.project_memory_tools import RequestProjectMemoryTool
-    from pillow_assistant.core.tools.builtin.project_tools import DeleteProjectTool
+    from pillow_assistant.core.tools.builtin.project_tools import (
+        DeleteProjectTool,
+        InheritProjectTool,
+        ProjectLineageTool,
+        RenameProjectTool,
+    )
     from pillow_assistant.core.tools.builtin.python_tool import PythonTool
     from pillow_assistant.core.tools.builtin.video_tool import ProcessVideoTool
 
@@ -60,4 +65,7 @@ def build_default_registry() -> ToolRegistry:
     register(AnatomyReferenceTool())
     register(RequestProjectMemoryTool())
     register(DeleteProjectTool())
+    register(RenameProjectTool())
+    register(InheritProjectTool())
+    register(ProjectLineageTool())
     return reg

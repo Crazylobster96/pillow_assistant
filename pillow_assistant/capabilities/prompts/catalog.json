@@ -2,6 +2,7 @@
   "prompts": [
     {"id":"shared.main_agent","version":"1.0.0","role":"system","files":{"zh":"shared/main-agent.zh.md","en":"shared/main-agent.en.md"}},
     {"id":"routing.project_triage.system","version":"1.0.0","role":"system","files":{"zh":"routing/project-triage.zh.md","en":"routing/project-triage.en.md"}},
+    {"id":"routing.project_triage.cad","version":"1.0.0","role":"context","files":{"zh":"routing/project-triage-cad.zh.md","en":"routing/project-triage-cad.en.md"}},
     {"id":"routing.project_triage.request","version":"1.0.0","role":"user","files":{"zh":"routing/project-triage-request.zh.md","en":"routing/project-triage-request.en.md"},"variables":["prompt"]},
     {"id":"conversation.topic_router.system","version":"1.0.0","role":"system","files":{"default":"conversation/topic-router-system.md"}},
     {"id":"conversation.topic_router.request","version":"1.0.0","role":"user","files":{"default":"conversation/topic-router-request.md"},"variables":["prompt"]},

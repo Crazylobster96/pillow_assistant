@@ -60,3 +60,109 @@ class DeleteProjectTool:
             session.session_id = None
             note = t("tool.delproj.current_cleared")
         return ToolResult(ok=True, text=t("tool.delproj.done", name=pname, id=pid) + note)
+
+
+@manifest_tool
+class RenameProjectTool:
+    name = "rename_project"
+    permission = Permission.WRITE_WS
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        store = getattr(ctx, "project_store", None)
+        if store is None:
+            return ToolResult(ok=False, text=t("tool.delproj.no_store"))
+        new_name = (args.get("new_name") or "").strip()
+        if not new_name:
+            return ToolResult(ok=False, text=t("tool.renproj.empty"))
+
+        # Default to the conversation's current project.
+        query = (args.get("project") or "").strip()
+        if not query:
+            project = store.get(getattr(getattr(ctx, "session", None), "project_id", None))
+            if project is None:
+                return ToolResult(ok=False, text=t("tool.renproj.no_current"))
+        else:
+            project = store.get(query)
+            if project is None:
+                matches = store.find_by_name(query)
+                if not matches:
+                    return ToolResult(ok=False, text=t("tool.delproj.not_found", name=query))
+                if len(matches) > 1:
+                    listing = "\n".join(f"- {p.name} (id={p.id})" for p in matches)
+                    return ToolResult(ok=False, text=t("tool.delproj.ambiguous", name=query, listing=listing))
+                project = matches[0]
+
+        old_name = project.name
+        store.rename(project.id, new_name)
+        return ToolResult(ok=True, text=t("tool.renproj.done", old=old_name, name=new_name, id=project.id))
+
+
+@manifest_tool
+class InheritProjectTool:
+    name = "inherit_project"
+    permission = Permission.WRITE_WS
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        store = getattr(ctx, "project_store", None)
+        if store is None:
+            return ToolResult(ok=False, text=t("tool.delproj.no_store"))
+        current = store.get(getattr(getattr(ctx, "session", None), "project_id", None))
+        if current is None:
+            return ToolResult(ok=False, text=t("tool.inhproj.no_current"))
+        query = (args.get("project") or "").strip()
+        if not query:
+            return ToolResult(ok=False, text=t("tool.delproj.empty"))
+        source = store.get(query)
+        if source is None:
+            matches = store.find_by_name(query)
+            if not matches:
+                return ToolResult(ok=False, text=t("tool.delproj.not_found", name=query))
+            if len(matches) > 1:
+                listing = "\n".join(f"- {p.name} (id={p.id})" for p in matches)
+                return ToolResult(ok=False, text=t("tool.delproj.ambiguous", name=query, listing=listing))
+            source = matches[0]
+        if source.id == current.id:
+            return ToolResult(ok=False, text=t("tool.inhproj.self"))
+        copied = store.inherit(current, source)
+        shown = ", ".join(copied[:40]) + (f" … (+{len(copied) - 40})" if len(copied) > 40 else "")
+        return ToolResult(ok=True, text=t("tool.inhproj.done", name=source.name, n=len(copied), files=shown or "-"),
+                          artifacts=copied[:40])
+
+
+@manifest_tool
+class ProjectLineageTool:
+    name = "project_lineage"
+    permission = Permission.READONLY
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        from pillow_assistant.core import project_lineage as lineage
+
+        store = getattr(ctx, "project_store", None)
+        if store is None:
+            return ToolResult(ok=False, text=t("tool.delproj.no_store"))
+        query = (args.get("project") or "").strip()
+        focus = None
+        if query.lower() not in ("all", "全部"):
+            if query:
+                project = store.get(query)
+                if project is None:
+                    matches = store.find_by_name(query)
+                    if not matches:
+                        return ToolResult(ok=False, text=t("tool.delproj.not_found", name=query))
+                    if len(matches) > 1:
+                        listing = "\n".join(f"- {p.name} (id={p.id})" for p in matches)
+                        return ToolResult(ok=False, text=t("tool.delproj.ambiguous", name=query, listing=listing))
+                    project = matches[0]
+            else:
+                project = store.get(getattr(getattr(ctx, "session", None), "project_id", None))
+            focus = project.id if project is not None else None
+        graph = lineage.component(lineage.build_graph(store), focus)
+        text = lineage.render_text(graph, focus)
+        if args.get("open"):
+            import webbrowser
+
+            page = store.base / "lineage.html"
+            page.write_text(lineage.render_html(graph, focus), "utf-8")
+            webbrowser.open(page.as_uri())
+            text += "\n" + t("tool.lineage.opened", path=page)
+        return ToolResult(ok=True, text=text)
