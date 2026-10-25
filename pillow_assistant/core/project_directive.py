@@ -10,6 +10,10 @@ Recognised forms (anywhere in the message)::
 ``parse_project_directive`` is pure; ``resolve_directive`` matches the name
 against the project index so triage can skip its model call. Renaming an
 existing project (改名 / rename) is left to the rename_project tool.
+
+``parse_inherit_source`` finds a project to build on ("基于「齿轮箱」项目",
+"用齿轮箱项目的模型", "based on the gearbox project"): its outputs are copied
+into the project this message lands in.
 """
 
 from __future__ import annotations
@@ -65,6 +69,28 @@ _TRAILING_CJK = re.compile(r"\s+[\u4e00-\u9fff].*$")
 
 # Words that look like a name slot but are not one ("put it in this project").
 _NOT_NAMES = {"这个", "该", "本", "当前", "那个", "新", "一个", "this", "that", "the", "current", "a", "new", "same"}
+
+
+_INHERIT_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
+    rf"(?:基于|继承|沿用|借用|复用)\s*(?:{_QUOTED}|{_BARE_WORD})\s*项目",
+    rf"在\s*(?:{_QUOTED}|{_BARE_WORD})\s*项目的?(?:成果|模型|基础|结果)(?:的基础)?上",
+    rf"(?:用|拿|使用|引用|导入)\s*(?:{_QUOTED}|{_BARE_WORD})\s*项目的?(?:成果|模型|文件|零件|图纸|产出|结果|STEP|STL|GLB)",
+    rf"(?<![a-z])(?:based\s+on|build(?:ing)?\s+on|inherit(?:ing)?(?:\s+from)?|reus(?:e|ing)|using)\s+(?:the\s+)?"
+    rf"(?:{_QUOTED}|{_BARE_WORD})\s+project(?![a-z])",
+    rf"(?<![a-z])(?:based\s+on|build(?:ing)?\s+on|inherit(?:ing)?(?:\s+from)?|reus(?:e|ing))\s+(?:the\s+)?project\s+"
+    rf"(?:{_QUOTED}|{_BARE_WORD})",
+))
+
+
+def parse_inherit_source(prompt: str) -> Optional[str]:
+    """Name of the project whose outputs this message wants to build on."""
+    for pattern in _INHERIT_PATTERNS:
+        match = pattern.search(prompt or "")
+        if match:
+            name = (match.group(1) or match.group(2) or "").strip()
+            if name and name.lower() not in _NOT_NAMES:
+                return name
+    return None
 
 
 @dataclass

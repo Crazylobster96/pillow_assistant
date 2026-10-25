@@ -95,3 +95,35 @@ class RenameProjectTool:
         old_name = project.name
         store.rename(project.id, new_name)
         return ToolResult(ok=True, text=t("tool.renproj.done", old=old_name, name=new_name, id=project.id))
+
+
+@manifest_tool
+class InheritProjectTool:
+    name = "inherit_project"
+    permission = Permission.WRITE_WS
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        store = getattr(ctx, "project_store", None)
+        if store is None:
+            return ToolResult(ok=False, text=t("tool.delproj.no_store"))
+        current = store.get(getattr(getattr(ctx, "session", None), "project_id", None))
+        if current is None:
+            return ToolResult(ok=False, text=t("tool.inhproj.no_current"))
+        query = (args.get("project") or "").strip()
+        if not query:
+            return ToolResult(ok=False, text=t("tool.delproj.empty"))
+        source = store.get(query)
+        if source is None:
+            matches = store.find_by_name(query)
+            if not matches:
+                return ToolResult(ok=False, text=t("tool.delproj.not_found", name=query))
+            if len(matches) > 1:
+                listing = "\n".join(f"- {p.name} (id={p.id})" for p in matches)
+                return ToolResult(ok=False, text=t("tool.delproj.ambiguous", name=query, listing=listing))
+            source = matches[0]
+        if source.id == current.id:
+            return ToolResult(ok=False, text=t("tool.inhproj.self"))
+        copied = store.inherit(current, source)
+        shown = ", ".join(copied[:40]) + (f" … (+{len(copied) - 40})" if len(copied) > 40 else "")
+        return ToolResult(ok=True, text=t("tool.inhproj.done", name=source.name, n=len(copied), files=shown or "-"),
+                          artifacts=copied[:40])

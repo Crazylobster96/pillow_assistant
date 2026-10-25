@@ -1,0 +1,38 @@
+{
+  "name": "inherit_project",
+  "version": "1.0.0",
+  "description": {
+    "zh": "把另一个项目的成果（模型、脚本、图纸、图片等工作目录文件）复制到当前项目的工作目录，以便在其基础上继续开发，例如对已有 CAD 项目的模型做 CAM 刀路或 Anatomy 演示图。同名文件不覆盖，原项目不受影响。",
+    "en": "Copy another project's outputs (models, scripts, drawings, images and other workspace files) into the current project's workspace to keep developing from them, e.g. CAM toolpaths or an Anatomy figure from an existing CAD project's model. Existing files are kept; the source project is untouched."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "要继承成果的项目名称或 id"
+        }
+      },
+      "required": [
+        "project"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "name or id of the project to build on"
+        }
+      },
+      "required": [
+        "project"
+      ]
+    }
+  },
+  "permission": "write_ws",
+  "modes": [
+    "project"
+  ]
+}

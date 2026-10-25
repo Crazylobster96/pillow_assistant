@@ -19,7 +19,12 @@ from typing import Optional
 from pillow_assistant.core import llm
 from pillow_assistant.core.cad_intent import mentions_cad
 from pillow_assistant.core.context_budget import join_context_and_prompt
-from pillow_assistant.core.project_directive import parse_project_directive, resolve_directive
+from pillow_assistant.core.project_directive import (
+    match_project,
+    parse_inherit_source,
+    parse_project_directive,
+    resolve_directive,
+)
 from pillow_assistant.capabilities.prompt_registry import render_prompt
 
 CONFIDENCE_THRESHOLD = 0.6
@@ -32,6 +37,7 @@ class TriageResult:
     name: Optional[str] = None
     confidence: float = 0.0
     rationale: str = ""
+    inherit_from: Optional[str] = None  # project whose outputs are copied in to build on
 
     @property
     def is_chat(self) -> bool:
@@ -91,7 +97,10 @@ def parse_triage(text: str, valid_ids: set[str]) -> TriageResult:
     if action == "continue" and pid in valid_ids:
         return TriageResult(action="continue", project_id=pid, confidence=conf, rationale=rationale)
     if action == "new":
-        return TriageResult(action="new", name=data.get("name"), confidence=conf, rationale=rationale)
+        parent = data.get("inherit_from")
+        parent = str(parent) if parent not in (None, "", "null") and str(parent) in valid_ids else None
+        return TriageResult(action="new", name=data.get("name"), confidence=conf, rationale=rationale,
+                            inherit_from=parent)
     return TriageResult(action="chat", confidence=conf, rationale=rationale)
 
 
@@ -107,10 +116,15 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
     # The user named the project ("项目：齿轮箱", "新建项目「支架」"): that wins.
     directive = parse_project_directive(prompt)
     decided = resolve_directive(directive, index) if directive else None
+    # Building on another project ("基于「齿轮箱」项目做刀路"): its outputs are
+    # copied into whichever project this lands in.
+    source = match_project(parse_inherit_source(prompt) or "", index)
+    inherit_id = str(source["id"]) if source else None
     if decided and (decided[0] == "continue" or decided[2]):
         action, pid, name = decided
         return TriageResult(action=action, project_id=pid, name=name if action == "new" else None,
-                            confidence=1.0, rationale="user-project")
+                            confidence=1.0, rationale="user-project",
+                            inherit_from=inherit_id if inherit_id != pid else None)
     cad = mentions_cad(prompt)
     listing = "\n".join(
         f'- id={p["id"]} 名称="{p.get("name","")}" 最近="{(p.get("last_prompt") or "")[:60]}"'
@@ -139,15 +153,21 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
             extra=llm.parse_extra(cfg.get("extra")),
         )
     except Exception:
-        if decided:
-            return TriageResult(action="new", name=derive_name(prompt), confidence=1.0, rationale="user-project")
+        if decided or inherit_id:
+            return TriageResult(action="new", name=derive_name(prompt), confidence=1.0, rationale="user-project",
+                                inherit_from=inherit_id)
         return TriageResult(action="chat", confidence=0.0, rationale="triage-failed")
 
     valid_ids = {str(p["id"]) for p in index}
     result = parse_triage(text, valid_ids)
-    if decided:  # an unnamed "新建项目": always a new project, named by the model
+    if inherit_id and not decided and result.action == "continue" and result.project_id != inherit_id:
+        # Building on the source inside another existing project.
+        result = TriageResult(action="continue", project_id=result.project_id, confidence=1.0,
+                              rationale="user-project", inherit_from=inherit_id)
+    elif decided or inherit_id:
+        # An unnamed "新建项目", or building on a project: a new project, named by the model.
         result = TriageResult(action="new", name=result.name if result.action == "new" else None,
-                              confidence=1.0, rationale="user-project")
+                              confidence=1.0, rationale="user-project", inherit_from=inherit_id)
     if result.action == "new" and not result.name:
         result.name = derive_name(prompt)
     return result

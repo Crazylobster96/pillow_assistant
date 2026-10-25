@@ -39,6 +39,17 @@ def _is_resume_request(prompt: str) -> bool:
     return text.startswith(("继续上次", "继续刚才", "resume ", "continue "))
 
 
+def _inherited_context(project) -> str:
+    """Tell the Agent which files came from the projects this one builds on."""
+    lines = []
+    for entry in project.inherited:
+        files = list(entry.get("files") or [])
+        shown = ", ".join(files[:40]) + (f" … (+{len(files) - 40})" if len(files) > 40 else "")
+        lines.append(t("core.inherited_entry", name=entry.get("name", ""), id=entry.get("id", ""),
+                       files=shown or "-"))
+    return t("core.inherited_context") + "\n" + "\n".join(lines)
+
+
 class Orchestrator:
     def __init__(self, storage: Any, vault: Any, project_manager: Any, max_steps: int = 50,
                  undo_manager: Any = None, ask_broker: Any = None) -> None:
@@ -255,6 +266,9 @@ class Orchestrator:
             note += t("core.project_by_user")
         elif tr.action == "new" and mentions_cad(request.prompt):
             note += t("core.project_name_hint")
+        inherited = next((e for e in project.inherited if e.get("id") == tr.inherit_from), None)
+        if inherited is not None:
+            note += t("core.project_inherited", name=inherited.get("name", ""), n=len(inherited.get("files") or []))
         await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=note + "\n"))
 
         audit = AuditLog(project.root / "audit.jsonl")
@@ -276,6 +290,8 @@ class Orchestrator:
                     ) + memory_ctx.rendered_context
             except Exception:
                 memory_ctx = None
+        if project.inherited:
+            final_context = ((final_context + "\n\n") if final_context else "") + _inherited_context(project)
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
                             request_id=request.id, project_id=project.id, project_root=project.root)
         resume_key = (project.id, session_id)
