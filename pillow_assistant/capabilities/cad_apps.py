@@ -4,6 +4,9 @@
   from its GitHub releases is unpacked into the CAD apps folder.
 - Bambu Studio (``bambu-labs``): open source; the Windows zip / Linux AppImage
   likewise.
+- FreeCAD (``cam`` milling): open source (LGPL); its CAM workbench runs headless
+  through ``freecadcmd``.  The Windows .7z is unpacked with the system ``tar``
+  (bsdtar reads 7z); the Linux AppImage is extracted so ``freecadcmd`` can run.
 - Bambu Connect (``bambu-labs``): Bambu Lab's closed app, not redistributable, so
   "install" opens its official download page for the user to finish.
 
@@ -19,6 +22,7 @@ import os
 import platform
 import re
 import shutil
+import subprocess
 import sys
 import urllib.request
 import webbrowser
@@ -41,6 +45,8 @@ class AppSpec:
     asset_patterns: dict = None            # platform -> regex for the release asset
     download_page: str = ""
     env: str = ""                          # explicit override, e.g. PILLOW_ORCASLICER
+    linux_exe: str = ""                    # executable inside an extracted AppImage, if it is extracted
+    macos_exe: str = ""                    # command-line executable inside the .app bundle
 
 
 APPS = {
@@ -63,6 +69,16 @@ APPS = {
                         "linux-x64": r"^BambuStudio_ubu24-.*\.AppImage$"},
         download_page="https://bambulab.com/en/download/studio",
         env="PILLOW_BAMBU_STUDIO",
+    ),
+    "freecad": AppSpec(
+        key="freecad", title="FreeCAD", repo="FreeCAD/FreeCAD",
+        commands=("freecadcmd", "FreeCADCmd"), windows_exe="FreeCADCmd.exe",
+        windows_paths=(r"FreeCAD 1.1\bin\FreeCADCmd.exe", r"FreeCAD 1.0\bin\FreeCADCmd.exe"),
+        asset_patterns={"windows-x64": r"^FreeCAD_[\d.]+.*-Windows-x86_64.*\.7z$",
+                        "linux-x64": r"^FreeCAD_[\d.]+.*-Linux-x86_64.*\.AppImage$",
+                        "linux-arm64": r"^FreeCAD_[\d.]+.*-Linux-aarch64.*\.AppImage$"},
+        download_page="https://www.freecad.org/downloads.php",
+        env="PILLOW_FREECAD", linux_exe="freecadcmd", macos_exe="Contents/Resources/bin/freecadcmd",
     ),
     "bambu-connect": AppSpec(
         key="bambu-connect", title="Bambu Connect",
@@ -126,9 +142,14 @@ def locate(key: str) -> Optional[Path]:
     elif sys.platform == "darwin":
         for name in (spec.title, spec.title.replace(" ", "")):
             app = Path("/Applications") / f"{name}.app"
-            if app.is_dir():
+            if spec.macos_exe and (app / spec.macos_exe).is_file():
+                return app / spec.macos_exe
+            if app.is_dir() and not spec.macos_exe:
                 return app
     else:
+        found = _find_in(mine / "squashfs-root", spec.linux_exe) if spec.linux_exe else None
+        if found:
+            return found
         images = sorted(mine.glob("*.AppImage")) if mine.is_dir() else []
         if images:
             return images[-1]
@@ -199,6 +220,38 @@ def _safe_extract(archive: Path, dest: Path) -> None:
         zf.extractall(dest)
 
 
+def _extract_7z(archive: Path, dest: Path) -> None:
+    """Unpack a .7z with the system bsdtar (Windows 10+ ships it), else py7zr if installed."""
+    tar = shutil.which("tar")
+    if tar:
+        p = subprocess.run([tar, "-xf", str(archive), "-C", str(dest)], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=1800)
+        if p.returncode == 0:
+            return
+        err = p.stderr.strip()[-300:]
+    else:
+        err = "no tar command"
+    try:
+        import py7zr  # type: ignore[import-not-found]
+    except ImportError:
+        raise CadAppError(f"cannot unpack {archive.name}: {err}") from None
+    with py7zr.SevenZipFile(archive) as zf:
+        root = dest.resolve()
+        for member in zf.getnames():
+            if not str((dest / member).resolve()).startswith(str(root)):
+                raise CadAppError(f"unsafe path in archive: {member}")
+        zf.extractall(dest)
+
+
+def _extract_appimage(image: Path, dest: Path) -> None:
+    """Extract an AppImage (no FUSE needed) so the command-line tools inside can run directly."""
+    p = subprocess.run([str(image), "--appimage-extract"], cwd=str(dest), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=1800)
+    if p.returncode != 0 or not (dest / "squashfs-root").is_dir():
+        raise CadAppError(f"cannot extract {image.name}: {p.stderr.strip()[-300:]}")
+    image.unlink()
+
+
 def install(key: str, *, get_json: Optional[Callable[[str], dict]] = None,
             download: Callable[[str, Path], None] = _download,
             open_page: Callable[[str], bool] = webbrowser.open) -> dict:
@@ -223,8 +276,13 @@ def install(key: str, *, get_json: Optional[Callable[[str], dict]] = None,
         if name.lower().endswith(".zip"):
             _safe_extract(file, staging)
             file.unlink()
+        elif name.lower().endswith(".7z"):
+            _extract_7z(file, staging)
+            file.unlink()
         else:
             file.chmod(0o755)
+            if spec.linux_exe:
+                _extract_appimage(file, staging)
         (staging / "INSTALLED.json").write_text(json.dumps({"app": key, "version": tag, "asset": name}), "utf-8")
         shutil.rmtree(target, ignore_errors=True)
         os.replace(staging, target)

@@ -1,12 +1,19 @@
-"""text-to-cam tool: turn CAD output into machine programs (see ``capabilities/cam2d.py``).
+"""text-to-cam tools: turn CAD output into machine programs.
 
-``cut2d`` reads a DXF from the workspace and writes laser / plasma G-code plus a
-preview SVG next to it.  It runs in-process with the standard library and only
-writes inside the workspace; it never connects to a machine.
+``text_to_cam`` (``cut2d``) reads a DXF from the workspace and writes laser /
+plasma G-code plus a preview SVG next to it (``capabilities/cam2d.py``).  It runs
+in-process with the standard library and only writes inside the workspace.
+
+``cam_mill`` turns a STEP part into 3-axis CNC milling programs through FreeCAD's
+CAM workbench (``capabilities/cam_mill.py``), installing FreeCAD on first use.
+It runs an external program, so like cad_app it is SYSTEM permission.
+
+Neither connects to a machine.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -91,4 +98,69 @@ class TextToCamTool:
         if warnings:
             lines.append(t("tool.cam.warnings") + "\n" + "\n".join(f"- {w}" for w in warnings))
         lines.append(t("tool.cam.review"))
+        return ToolResult(ok=True, text="\n".join(lines), artifacts=files)
+
+
+@manifest_tool
+class CamMillTool:
+    name = "cam_mill"
+    permission = Permission.SYSTEM
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        from pillow_assistant.capabilities import cad_apps, cam_mill
+
+        if not getattr(ctx, "allow_cli", True):
+            return ToolResult(ok=False, text=t("tool.cli.disabled"))
+        ws = Path(ctx.workspace)
+        raw = str(args.get("input") or "").strip()
+        src = _resolve(ctx, raw)
+        if not raw or not (_under(ws, src) or _is_reference(ctx, src)):
+            return ToolResult(ok=False, text=t("tool.fr.denied", path=raw))
+        if not src.is_file():
+            return ToolResult(ok=False, text=t("tool.fr.not_found", path=raw))
+        if src.suffix.lower() not in (".step", ".stp"):
+            return ToolResult(ok=False, text=t("tool.cam.not_step"))
+        out_raw = str(args.get("output") or "").strip()
+        out = _resolve(ctx, out_raw) if out_raw else ws / (src.stem + ".nc")
+        if not _under(ws, out):
+            return ToolResult(ok=False, text=t("tool.fw.outside"))
+        try:
+            machine = _settings(ctx, args, "machine")
+            job = _settings(ctx, args, "job")
+            cam_mill.build_spec(machine, job)  # fail fast, before any download
+        except cam2d.CamError as exc:
+            return ToolResult(ok=False, text=t("tool.cam.failed", err=exc))
+
+        loop = asyncio.get_event_loop()
+        spec = cad_apps.APPS["freecad"]
+        app = cad_apps.locate("freecad")
+        if app is None:
+            try:
+                result = await loop.run_in_executor(None, cad_apps.install, "freecad")
+            except Exception as exc:  # noqa: BLE001 - offline, rate limit, unsupported platform
+                return ToolResult(ok=False, text=t("tool.cam.no_freecad", err=exc, page=spec.download_page))
+            if "opened" in result:
+                return ToolResult(ok=False, text=t("tool.cadapp.manual", app=spec.title, page=result["opened"]))
+            app = Path(result["path"])
+        try:
+            result = await loop.run_in_executor(
+                None, lambda: cam_mill.mill(src, out, machine, job, cad_apps.command_for(app)))
+        except cam2d.CamError as exc:
+            return ToolResult(ok=False, text=t("tool.cam.failed", err=exc))
+        root = ws.resolve()
+
+        def rel(p: str) -> str:
+            path = Path(p).resolve()
+            return path.relative_to(root).as_posix() if _under(root, path) else str(path)
+
+        files = [rel(p) for p in result["programs"]] + [rel(result["preview"]), rel(result["sheet"])]
+        if result["project"]:
+            files.append(rel(result["project"]))
+        lines = [t("tool.cam.milled", programs=", ".join(rel(p) for p in result["programs"]),
+                   preview=rel(result["preview"]), sheet=rel(result["sheet"]),
+                   project=rel(result["project"]) if result["project"] else "-",
+                   ops=", ".join(result["operations"]), minutes=f"{result['minutes']:.0f}")]
+        if result["warnings"]:
+            lines.append(t("tool.cam.warnings") + "\n" + "\n".join(f"- {w}" for w in result["warnings"]))
+        lines.append(t("tool.cam.mill_review"))
         return ToolResult(ok=True, text="\n".join(lines), artifacts=files)

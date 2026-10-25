@@ -14,7 +14,7 @@
           "enum": [
             "cut2d"
           ],
-          "description": "cut2d：把工作目录里的 DXF 轮廓转成激光/等离子切割 G-code（切缝补偿、先内后外、引入线），同时生成预览 SVG。铣削（mill）后续加入"
+          "description": "cut2d：把工作目录里的 DXF 轮廓转成激光/等离子切割 G-code（切缝补偿、先内后外、引入线），同时生成预览 SVG。铣削用 cam_mill 工具"
         },
         "input": {
           "type": "string",
@@ -54,7 +54,7 @@
           "enum": [
             "cut2d"
           ],
-          "description": "cut2d: turn DXF profiles in the workspace into laser/plasma cutting G-code (kerf compensation, inside-out order, lead-ins) plus a preview SVG. Milling (mill) comes later"
+          "description": "cut2d: turn DXF profiles in the workspace into laser/plasma cutting G-code (kerf compensation, inside-out order, lead-ins) plus a preview SVG. Milling uses the cam_mill tool"
         },
         "input": {
           "type": "string",
