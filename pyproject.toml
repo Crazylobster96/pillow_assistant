@@ -88,4 +88,5 @@ packages = [
     "skills/builtin/*.txt",
     "skills/builtin/*/SKILL.md",
     "skills/text_to_cad/**/*",
+    "skills/anatomy/**/*",
 ]

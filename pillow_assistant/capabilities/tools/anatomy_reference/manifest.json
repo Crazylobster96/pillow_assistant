@@ -1,0 +1,33 @@
+{
+  "name": "anatomy_reference",
+  "version": "1.0.0",
+  "description": {
+    "zh": "读取 Anatomy 技能自带的文件（references/*.md 指南、kit/ 源码、examples/ 示例源码、scripts/），路径形如 \"references/craft.md\"；给目录则列出内容；不给 path 则返回 Anatomy 版本、Node.js 与 Chrome 是否可用。",
+    "en": "Read files shipped with the Anatomy skill (references/*.md guides, kit/ sources, examples/ sources, scripts/), path like \"references/craft.md\"; a folder lists its contents; no path returns the Anatomy version and whether Node.js and Chrome are available."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "技能目录内的相对路径，如 references/kit.md 或 examples/dial-indicator/build.mjs；留空返回状态"
+        }
+      }
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "path inside the skill folder, e.g. references/kit.md or examples/dial-indicator/build.mjs; empty returns status"
+        }
+      }
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

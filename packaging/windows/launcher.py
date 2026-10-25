@@ -749,6 +749,8 @@ def setup_environment(paths: Paths) -> None:
     env.setdefault("UV_PYTHON_INSTALL_DIR", str(cad / "python"))
     env.setdefault("UV_TOOL_DIR", str(cad / "tools"))
     env.setdefault("PILLOW_CAD_APPS_DIR", str(cad / "apps"))  # OrcaSlicer etc., installed on first use
+    # Anatomy: the bundled portable Node (build.ps1), or where it is installed on first use.
+    env.setdefault("PILLOW_NODE_DIR", str(root / "node-runtime"))
     # Mainland China mirrors for downloads the app makes itself (core/mirrors.py).
     cfg = load_config(paths)
     env.setdefault("PILLOW_MIRRORS", _mirror_mode(cfg))
@@ -827,6 +829,16 @@ def self_test(paths: Paths) -> int:
     except Exception as exc:  # noqa: BLE001
         failed.append("chromium")
         print(f"FAIL  chromium: {exc!r}")
+    node_dir = paths.root / "node-runtime"
+    if node_dir.is_dir():
+        exe = next((p for p in node_dir.glob("*/node.exe")), None)
+        try:
+            out = subprocess.run([str(exe), "--version"], capture_output=True, text=True, timeout=30).stdout.strip()
+            assert out.startswith("v")
+            print("ok    node", out)
+        except Exception as exc:  # noqa: BLE001
+            failed.append("node")
+            print(f"FAIL  node: {exc!r}")
     print("version:", json.dumps(current_version(paths)))
     return 1 if failed else 0
 

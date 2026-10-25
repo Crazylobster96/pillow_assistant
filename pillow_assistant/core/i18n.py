@@ -278,6 +278,33 @@ _ZH = {
     "tool.cadref.denied": "只能读取 text-to-cad 技能目录内的文件：{path}",
     "tool.cadref.not_found": "未找到文件：{path}",
     "tool.cadref.status": "text-to-cad {version}（cadgen {cadgen}，上游 {repo}@{commit}）\nuv：{uv}\n技能目录：{root}\n技能：\n{skills}",
+    "tool.skill.anatomy": "（本技能来自 Anatomy {version}，在枕头里这样执行：所有 `node …` 命令用 anatomy 工具，args=[脚本, 参数…]，"
+                          "在工作目录的 anatomy/ 文件夹里运行；那里已经放好 kit/ 和 scripts/（与上游目录相同，由枕头维护，别改）。"
+                          "每个图写在 anatomy/figures/<名字>/build.mjs（用 file_write，路径为 anatomy/figures/<名字>/build.mjs），"
+                          "这样 `import * as k from \"../../kit/iso-kit.mjs\"` 与示例完全一致；构建：args=[\"figures/<名字>/build.mjs\"]，"
+                          "截图检查：args=[\"scripts/capture.mjs\", \"figures/<名字>/<名字>.html\", \"--out\", \"shots/x.png\"]。"
+                          "examples/、references/、kit 源码用 anatomy_reference 工具读取，路径形如 \"references/craft.md\"、"
+                          "\"examples/dial-indicator/build.mjs\"；想跑示例就先复制到 figures/。"
+                          "Chrome 已由枕头自动找到（CHROME_PATH）。检查生成的 PNG：模型能看图时用 file_read，否则汇报路径；"
+                          "做好后用 anatomy 工具 action=\"open\"、path=\"figures/<名字>/<名字>.html\" 在浏览器里打开给用户看。"
+                          "不要使用 npx skills / git clone / 发布到社区画廊，除非用户明确要求。）",
+    "tool.anatomy.bad_action": "action 只能是 run 或 open。",
+    "tool.anatomy.bad_args": "args 必须是字符串数组，第一个是 anatomy/ 下的 .mjs 脚本，如 [\"figures/lock/build.mjs\"]。",
+    "tool.anatomy.no_script": "anatomy/ 目录下没有这个脚本：{path}（图的构建脚本放在 anatomy/figures/<名字>/build.mjs）",
+    "tool.anatomy.no_node": "没有可用的 Node.js 20.10+，自动下载也失败了：{err}。请安装 Node.js 22 LTS（国内可用 https://npmmirror.com/mirrors/node/）。",
+    "tool.anatomy.node_installed": "已自动安装 Node.js {version}：{path}",
+    "tool.anatomy.no_chrome": "截图检查需要 Chrome / Chromium：安装 Chrome，或 pip install playwright 后执行 playwright install chromium；也可以设置 CHROME_PATH。图本身已生成，不受影响。",
+    "tool.anatomy.outputs": "新生成/更新的文件（相对 {root}）：{files}",
+    "tool.anatomy.no_page": "anatomy/ 目录下没有这个页面：{path}（可打开 .html / .svg / .pdf）",
+    "tool.anatomy.open_failed": "无法打开浏览器：{err}",
+    "tool.anatomy.opened": "已在浏览器中打开：{path}",
+    "tool.anatomyref.denied": "只能读取 Anatomy 技能目录内的文件：{path}",
+    "tool.anatomyref.not_found": "未找到文件：{path}",
+    "tool.anatomyref.status": "Anatomy {version}（上游 {repo}@{commit}）\nNode：{node}\nChrome：{chrome}\n技能目录：{root}\n"
+                              "目录：SKILL.md、references/（craft、kit、motion、react、verify、webgl、walkthrough、3d、print、publish）、"
+                              "kit/、scripts/、examples/",
+    "tool.anatomyref.node_missing": "未找到（首次运行 anatomy 会自动下载 Node.js {version}）",
+    "tool.anatomyref.chrome_missing": "未找到（截图检查不可用，图仍可生成）",
     "tool.cam.bad_action": "action 只能是 cut2d；铣削用 cam_mill 工具。",
     "tool.cam.not_dxf": "cut2d 需要 .dxf 文件；STEP 零件先用 dxf 技能导出轮廓。",
     "tool.cam.too_big": "DXF 文件太大（上限 50 MB）。",
@@ -667,6 +694,36 @@ _EN = {
     "tool.cadref.denied": "Only files inside the text-to-cad skills folder can be read: {path}",
     "tool.cadref.not_found": "File not found: {path}",
     "tool.cadref.status": "text-to-cad {version} (cadgen {cadgen}, upstream {repo}@{commit})\nuv: {uv}\nSkills folder: {root}\nSkills:\n{skills}",
+    "tool.skill.anatomy": "(This skill comes from Anatomy {version}. In Pillow: run every `node …` command with the anatomy "
+                          "tool, args=[script, args…]; it runs in the workspace's anatomy/ folder, which already holds kit/ and "
+                          "scripts/ in the upstream layout (kept up to date by Pillow; do not edit them). Write each figure as "
+                          "anatomy/figures/<name>/build.mjs (file_write path anatomy/figures/<name>/build.mjs), so "
+                          "`import * as k from \"../../kit/iso-kit.mjs\"` matches the examples exactly; build with "
+                          "args=[\"figures/<name>/build.mjs\"], check with args=[\"scripts/capture.mjs\", "
+                          "\"figures/<name>/<name>.html\", \"--out\", \"shots/x.png\"]. Read examples/, references/ and the "
+                          "kit sources with the anatomy_reference tool, path like \"references/craft.md\" or "
+                          "\"examples/dial-indicator/build.mjs\"; to run an example, copy it into figures/ first. Pillow finds "
+                          "Chrome for you (CHROME_PATH). Look at the PNGs with file_read when you can see images, else report "
+                          "their paths; when done, show the page with the anatomy tool, action=\"open\", "
+                          "path=\"figures/<name>/<name>.html\". Skip npx skills / git clone / publishing to the community "
+                          "gallery unless the user asks.)",
+    "tool.anatomy.bad_action": "action must be run or open.",
+    "tool.anatomy.bad_args": "args must be an array of strings starting with a .mjs script under anatomy/, e.g. [\"figures/lock/build.mjs\"].",
+    "tool.anatomy.no_script": "No such script under anatomy/: {path} (a figure's build script goes in anatomy/figures/<name>/build.mjs)",
+    "tool.anatomy.no_node": "No Node.js 20.10+ found, and downloading it failed: {err}. Install Node.js 22 LTS.",
+    "tool.anatomy.node_installed": "Installed Node.js {version}: {path}",
+    "tool.anatomy.no_chrome": "The screenshot checks need Chrome or Chromium: install Chrome, or pip install playwright and run playwright install chromium, or set CHROME_PATH. The figure itself was built.",
+    "tool.anatomy.outputs": "New or updated files (under {root}): {files}",
+    "tool.anatomy.no_page": "No such page under anatomy/: {path} (.html, .svg or .pdf)",
+    "tool.anatomy.open_failed": "Could not open the browser: {err}",
+    "tool.anatomy.opened": "Opened in the browser: {path}",
+    "tool.anatomyref.denied": "Only files inside the Anatomy skill folder can be read: {path}",
+    "tool.anatomyref.not_found": "File not found: {path}",
+    "tool.anatomyref.status": "Anatomy {version} (upstream {repo}@{commit})\nNode: {node}\nChrome: {chrome}\nSkill folder: {root}\n"
+                              "Contents: SKILL.md, references/ (craft, kit, motion, react, verify, webgl, walkthrough, 3d, "
+                              "print, publish), kit/, scripts/, examples/",
+    "tool.anatomyref.node_missing": "not found (the first anatomy run downloads Node.js {version})",
+    "tool.anatomyref.chrome_missing": "not found (screenshot checks unavailable; figures still build)",
     "tool.cam.bad_action": "action must be cut2d; use the cam_mill tool for milling.",
     "tool.cam.not_dxf": "cut2d needs a .dxf file; export the profile of a STEP part with the dxf skill first.",
     "tool.cam.too_big": "The DXF file is too large (limit 50 MB).",

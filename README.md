@@ -114,6 +114,13 @@ Agent 单次任务默认最多 **50 步**工具调用；打满会暂停并提示
 - **CAM（3 轴 CNC 铣削）**：说「用 6mm 平底刀和 6mm 钻头把这个零件出成 GRBL 程序」，`cam_mill` 工具用 FreeCAD 的 CAM 工作台（LGPL，首次使用自动下载到 `cad-runtime\apps`）把 STEP 零件变成面铣、自适应开粗、钻孔、精加工、球头曲面精加工的 G-code，按 GRBL / LinuxCNC / Fanuc / Mach3/4 等控制器后处理（GRBL 每把刀一个文件），检查毛坯、行程和刃长，并生成预览图、加工单和可在 FreeCAD 里仿真的 `.FCStd` 工程。转速、进给、切深必须由你提供。有第四轴（A/B）或摇篮（AC/BC）时可做 3+2 定轴：给出每个工位的刀具来向（如 +Y、-Z），每个工位一个程序，旋转前自动抬刀，并检查角度限位和回转半径；Fanuc 还可输出 G68.2 倾斜面。五轴联动暂不支持。
 - 想覆盖某个 CAD 技能，在 `~/.pillow/skills/<同名>/SKILL.md` 放自己的版本即可。
 
+#### 等轴测讲解图（Anatomy）
+
+同样在 `text-to-cad` 分支。集成了 [wheresryan22/anatomy](https://github.com/wheresryan22/anatomy)（MIT）：说「做一张讲令牌桶限流的交互讲解图」「把这个支架做成可拆解的等轴测图，浅色主题」。Agent 应用 `anatomy` 技能，先把概念变成一台真实的小机器（锁、量表、绘图仪……），在 workspace 的 `anatomy/figures/<名字>/build.mjs` 写构建脚本，再用 `anatomy` 工具运行（每次执行前确认），产出可交互的 HTML / 单个 SVG / React 组件，需要时加 WebGL 效果或打印成 A4 PDF；做完会自动截图自检并在浏览器里打开。
+
+- 运行只需要 Node.js 20.10+ 和 Chrome，没有 npm 依赖。没有 Node 时首次使用会自动下载固定版本（nodejs.org，连不上就走 npmmirror / 华为云镜像，按锁定的 SHA-256 校验）；截图检查复用 Playwright 的 Chromium。Windows 离线包已内置 Node（`node-runtime\`）。
+- 技能原样放在 `pillow_assistant/capabilities/skills/anatomy/`（`UPSTREAM.json` 记录版本），由同一个每日同步工作流跟随上游的正式发布标签；要让所有人退回旧版，在 Actions 变量里设 `ANATOMY_REF=v1.0.0` 并运行同步工作流。手动同步：`python scripts/sync_anatomy.py`。
+
 #### 让 Agent 配置自己
 
 - 「把 qwen2.5 设为对话模型，看图用 GPT-4o，SmallModel 用于上下文压缩」→ Agent 调 `assign_model_role` 持久化角色（chat/vision/compression/asr），后续请求自动路由；也可在配置窗口选中模型后点「**设为默认对话模型**」；
@@ -272,6 +279,13 @@ Pillow ships [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-ca
 - **CAM (laser / plasma cutting)**: ask "turn this part's outline into GRBL laser G-code". The Agent applies the built-in `cam` skill, asks for the machine and material settings (it never guesses feed, power, pierce delay or kerf), and runs the `text_to_cam` tool to turn the DXF into GRBL / LinuxCNC / Fanuc code with kerf compensation, holes before outlines, scrap-side lead-ins, a bed check and a preview SVG. It only writes files and never connects to a machine.
 - **CAM (3-axis CNC milling)**: ask "make GRBL programs for this part with a 6 mm end mill and a 6 mm drill". The `cam_mill` tool runs FreeCAD's CAM workbench (LGPL, downloaded on first use into `cad-runtime/apps`) to turn the STEP part into facing, adaptive roughing, drilling, finishing and ball-end surfacing G-code, posted for GRBL / LinuxCNC / Fanuc / Mach3/4 and more (one file per tool on GRBL). It checks stock, travel and flute length, and writes a preview, a setup sheet and a `.FCStd` project to simulate in FreeCAD. You supply speeds, feeds and depths of cut. With a 4th axis (A/B) or a trunnion (AC/BC) it also does 3+2 indexed work: give the direction the tool comes from in each setup (such as +Y or -Z) and it writes one program per setup, retracts before every rotation, and checks the axis limits and the swing radius; on Fanuc it can write a G68.2 tilted plane instead. Simultaneous 5-axis is not supported.
 - To override a CAD skill, put your own `~/.pillow/skills/<same-name>/SKILL.md`.
+
+#### Isometric explainer figures (Anatomy)
+
+Also on the `text-to-cad` branch. Pillow ships [wheresryan22/anatomy](https://github.com/wheresryan22/anatomy) (MIT): ask "make an interactive figure explaining a token bucket rate limiter" or "draw this bracket as an isometric figure that comes apart, light theme". The Agent applies the `anatomy` skill, turns the idea into a real little machine (a lock, a gauge, a plotter…), writes a build script in the workspace's `anatomy/figures/<name>/build.mjs`, and runs it with the `anatomy` tool (each run asks for confirmation) to produce an interactive HTML page, a lone SVG or React components, with WebGL effects or A4 PDFs when asked. It screenshots its own work to check it and opens the page in your browser.
+
+- It needs only Node.js 20.10+ and Chrome, no npm packages. Without Node, a pinned version downloads on first use (nodejs.org, else the npmmirror / Huawei Cloud mirrors, checked against a pinned SHA-256); the screenshot checks reuse Playwright's Chromium. The Windows bundle ships Node in `node-runtime\`.
+- The skill is vendored in `pillow_assistant/capabilities/skills/anatomy/` (`UPSTREAM.json` records the release) and follows upstream release tags through the same daily sync workflow; to pin everyone to an older one, set the Actions variable `ANATOMY_REF` (e.g. `v1.0.0`) and run the workflow. Sync by hand with `python scripts/sync_anatomy.py`.
 
 #### Let the Agent configure itself
 

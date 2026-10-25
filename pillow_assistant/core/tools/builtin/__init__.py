@@ -7,6 +7,7 @@ from pillow_assistant.core.tools.registry import ToolRegistry
 
 
 def build_default_registry() -> ToolRegistry:
+    from pillow_assistant.core.tools.builtin.anatomy_tool import AnatomyReferenceTool, AnatomyTool
     from pillow_assistant.core.tools.builtin.ask_tool import AskUserTool
     from pillow_assistant.core.tools.builtin.browser_tool import BrowserReadTool
     from pillow_assistant.core.tools.builtin.cad_tool import CadAppTool, CadReferenceTool, TextToCadTool
@@ -55,6 +56,8 @@ def build_default_registry() -> ToolRegistry:
     register(CadAppTool())
     register(TextToCamTool())
     register(CamMillTool())
+    register(AnatomyTool())
+    register(AnatomyReferenceTool())
     register(RequestProjectMemoryTool())
     register(DeleteProjectTool())
     return reg

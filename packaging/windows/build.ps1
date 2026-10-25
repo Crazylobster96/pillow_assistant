@@ -6,7 +6,8 @@
   Produces dist\PillowAssistant\ (and a .zip of it) containing:
     python\         relocatable CPython (NuGet "python" package) + every dependency
     app\            the committed source tree + VERSION.json
-    ms-playwright\  Chromium for the browser tool
+    ms-playwright\  Chromium for the browser tool (and Anatomy's screenshot checks)
+    node-runtime\   portable Node.js for the Anatomy figure kit
     cad-runtime\    uv cache with the pinned text-to-cad cadgen runtime (CAD works offline),
                     and apps\pins.json for CAD apps installed on first use
     launcher.pyw, update.json, PillowAssistant.exe, PillowAssistant-console.bat
@@ -23,6 +24,7 @@ param(
     [string]$ModelsDir = "",
     [switch]$SkipBrowser,
     [switch]$SkipCad,
+    [switch]$SkipNode,
     [switch]$SkipZip,
     [switch]$SkipSelfTest
 )
@@ -110,6 +112,18 @@ if (-not $SkipCad) {
     $Pins = Join-Path $Bundle "cad-runtime\apps\pins.json"
     & $Py -E -s -m pillow_assistant.capabilities.cad_apps pin windows-x64 $Pins
     if ($LASTEXITCODE -ne 0) { Write-Warning "could not pin CAD app releases; first-use installs need the GitHub API" }
+}
+
+# 3d. Anatomy: a portable Node.js (the kit needs no npm packages), the version and
+#     SHA-256 pinned in pillow_assistant\capabilities\anatomy.py. nodejs.org first,
+#     then the mainland China mirrors; every copy is checked against the pin.
+if (-not $SkipNode) {
+    Step "Node.js (Anatomy)"
+    $NodeDir = Join-Path $Bundle "node-runtime"
+    New-Item -ItemType Directory -Force -Path $NodeDir | Out-Null
+    $env:PILLOW_NODE_DIR = $NodeDir
+    Run $Py @("-E", "-s", "-c", "import sys; sys.path.insert(0, r'$Repo'); from pillow_assistant.capabilities import anatomy; print(anatomy.install_node(plat='windows-x64'))")
+    Remove-Item Env:PILLOW_NODE_DIR
 }
 
 # 4. Application source: exactly the committed tree, like the updater downloads.
