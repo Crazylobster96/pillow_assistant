@@ -2,7 +2,9 @@ name: Windows offline release
 
 on:
   push:
-    tags: ["v*"]
+    # CAD-edition tags (v*-text-to-cad*) are created by the private repository's
+    # release_local.ps1, which uploads its own packages to that release.
+    tags: ["v*", "!v*-text-to-cad*"]
   pull_request:
     paths:
       - "packaging/windows/**"
