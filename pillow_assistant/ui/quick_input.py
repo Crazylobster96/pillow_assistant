@@ -3,7 +3,10 @@
 Shows referenced files as removable chips, a compact model picker, a one-line
 prompt field, and an inline streamed response area. Submitting builds an
 AppRequest (carrying the session's references) and sends it on the event bus.
-The bar is frameless, non-activating, and disappears on Esc / focus-out.
+Files dropped on the bar become references too. While a request runs, a stop
+button cancels it; a bar opened while one is running picks up its transcript
+from the RunTracker and keeps following it. The bar is frameless,
+non-activating, and disappears on Esc / focus-out.
 """
 
 from __future__ import annotations
@@ -74,12 +77,13 @@ class QuickInputBar(QFrame):
     RESIZE_MARGIN = 7  # px band at the window edges that triggers drag-resize
 
     def __init__(self, storage, bus, session, anchor_global=None, open_reference=None, parent=None,
-                 history=None) -> None:
+                 history=None, tracker=None) -> None:
         super().__init__(parent)
         self.storage = storage
         self.bus = bus
         self.session = session
         self.open_reference = open_reference  # callable(path) -> reopen its preview
+        self.tracker = tracker  # RunTracker: transcripts of runs started from any dialog
         self._active_id: Optional[str] = None
         self._resizing = Qt.Edge(0)
 
@@ -98,6 +102,7 @@ class QuickInputBar(QFrame):
         self.setStyleSheet(panel_qss(self._glass_opacity))
         glass_theme_changed.opacity_changed.connect(self._apply_glass_opacity)
         self.setMouseTracking(True)
+        self.setAcceptDrops(True)
 
         self.models = self.storage.list_model_configs()
 
@@ -129,6 +134,16 @@ class QuickInputBar(QFrame):
         self.prompt_edit.setPlaceholderText(t("input.placeholder"))
         self.prompt_edit.setMinimumWidth(360)
         top.addWidget(self.prompt_edit, 1)
+        self.stop_btn = QPushButton(t("input.stop"), self)
+        self.stop_btn.setToolTip(t("input.stop_tip"))
+        self.stop_btn.setStyleSheet(
+            "QPushButton { color:#FFFFFF; background: rgba(215,70,85,225); border:none;"
+            " border-radius:9px; padding:4px 10px; }"
+            "QPushButton:hover { background: rgba(235,90,110,245); }"
+        )
+        self.stop_btn.clicked.connect(self._on_stop)
+        self.stop_btn.hide()
+        top.addWidget(self.stop_btn, 0)
         close_btn = QPushButton("×", self)
         close_btn.setFixedSize(26, 26)
         close_btn.setToolTip(t("input.close_tip"))
@@ -174,10 +189,30 @@ class QuickInputBar(QFrame):
         self.setMinimumWidth(420)
         self._grip = _CornerGrip(self)
         self._refresh_chips()
+        self._adopt_running()
         if anchor_global is not None:
             self.adjustSize()
             self.move(anchor_global)
         self._position_grip()
+
+    def _adopt_running(self) -> None:
+        """Show and keep following a run that is still going (its dialog was closed)."""
+        run = self.tracker.latest_running() if self.tracker is not None else None
+        if run is None or self.bus is None:
+            return
+        self._active_id = run.request_id
+        self._had_tool = False
+        self.response_view.show()
+        self.response_view.appendPlainText(t("input.resumed") + f"\n> {run.prompt}\n")
+        self.response_view.moveCursor(QTextCursor.MoveOperation.End)
+        self.response_view.insertPlainText(run.text)
+        self._set_tool_status(t("tool.status.processing"))
+        if run.last_event is not None:
+            self._on_event(run.last_event)
+        self.prompt_edit.setEnabled(False)
+        self.stop_btn.show()
+        if self.height() < 300:
+            self.resize(max(self.width(), 520), 340)
 
     def _position_grip(self) -> None:
         grip = getattr(self, "_grip", None)
@@ -218,15 +253,18 @@ class QuickInputBar(QFrame):
                 w.deleteLater()
 
         refs = self.session.references if self.session else []
-        if not refs:
+        shown = [p for p in (self.session.displayed if self.session else []) if p not in refs]
+        if not refs and not shown:
             self.chips_container.hide()
             return
         self.chips_container.show()
         for path in refs:
             self.chips_row.addWidget(self._make_chip(path))
+        for path in shown:  # on screen in a preview window: goes with the question too
+            self.chips_row.addWidget(self._make_chip(path, displayed=True))
         self.chips_row.addStretch(1)
 
-    def _make_chip(self, path: str) -> QWidget:
+    def _make_chip(self, path: str, displayed: bool = False) -> QWidget:
         chip = QFrame(self)
         chip.setAttribute(Qt.WA_StyledBackground, True)
         chip.setStyleSheet(
@@ -239,8 +277,9 @@ class QuickInputBar(QFrame):
         lay.setSpacing(4)
         name = Path(path).name or path
         # The name is a button: clicking it (re)opens the file's preview panel.
-        name_btn = QPushButton(("📁 " if Path(path).is_dir() else "📄 ") + name, chip)
-        name_btn.setToolTip(path + "\n" + t("chip.reopen"))
+        icon = "👁 " if displayed else ("📁 " if Path(path).is_dir() else "📄 ")
+        name_btn = QPushButton(icon + name, chip)
+        name_btn.setToolTip(path + "\n" + t("chip.displayed" if displayed else "chip.reopen"))
         name_btn.setCursor(Qt.PointingHandCursor)
         name_btn.setFlat(True)
         name_btn.setStyleSheet("QPushButton { background: transparent; border: none; text-align: left; }")
@@ -248,7 +287,7 @@ class QuickInputBar(QFrame):
         lay.addWidget(name_btn)
         remove = QPushButton("×", chip)
         remove.setFixedSize(18, 18)
-        remove.clicked.connect(lambda: self._remove_ref(path))
+        remove.clicked.connect(lambda: self._remove_ref(path, displayed))
         lay.addWidget(remove)
         return chip
 
@@ -256,22 +295,42 @@ class QuickInputBar(QFrame):
         if self.open_reference is not None:
             self.open_reference(path)
 
-    def _remove_ref(self, path: str) -> None:
+    def _remove_ref(self, path: str, displayed: bool = False) -> None:
         if self.session:
-            self.session.remove_reference(path)
+            if displayed:
+                self.session.remove_displayed(path)
+            else:
+                self.session.remove_reference(path)
         self._refresh_chips()
+
+    # -- dropping files on the bar adds them as references --------------------
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasUrls() and any(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+        event.acceptProposedAction()
+        if self.session is not None:
+            for path in paths:
+                self.session.add_reference(path)
+        self._refresh_chips()
+        self.prompt_edit.setFocus()
 
     # -- submit / stream ----------------------------------------------------
     def _on_submit(self) -> None:
         text = self.prompt_edit.text().strip()
         if not text or self.bus is None or self._active_id is not None or not self.models:
             return
-        refs = self.session.references if self.session else []
+        refs = self.session.request_references() if self.session else []
         request = AppRequest(
             kind=RequestKind.TEXT,
             prompt=text,
             model_ref=self.model_combo.currentData(),
             references=refs,
+            meta={"new_references": self.session.take_new(refs)} if self.session else {},
         )
         self._active_id = request.id
         self._had_tool = False
@@ -280,10 +339,20 @@ class QuickInputBar(QFrame):
         self.response_view.appendPlainText(f"> {text}\n")
         self.prompt_edit.clear()
         self.prompt_edit.setEnabled(False)
+        self.stop_btn.show()
         if self.height() < 300:  # first answer: open to a usable size, but keep any manual resize
             self.resize(max(self.width(), 520), 340)
         self._position_grip()
+        if self.tracker is not None:
+            self.tracker.start(request.id, text)
         self.bus.submit(request)
+
+    def _on_stop(self) -> None:
+        if self._active_id is None or self.bus is None:
+            return
+        self._set_tool_status(t("tool.status.stopping"))
+        self.stop_btn.setEnabled(False)
+        self.bus.cancel(self._active_id)
 
     def _set_tool_status(self, text: str) -> None:
         self.tool_status.setText(text)
@@ -323,7 +392,10 @@ class QuickInputBar(QFrame):
                 self.response_view.appendPlainText(f"\n{t('common.error_prefix')} {event.text}")
                 self._finish()
             elif event.type == EventType.DONE:
-                if not getattr(self, "_had_tool", False):
+                if meta.get("cancelled"):
+                    self._set_tool_status(t("tool.status.stopped"))
+                    self.response_view.appendPlainText(f"\n{t('input.stopped')}")
+                elif not getattr(self, "_had_tool", False):
                     self._set_tool_status(t("tool.status.complete"))
                 self.response_view.appendPlainText("\n")
                 self._finish()
@@ -331,6 +403,8 @@ class QuickInputBar(QFrame):
             log.exception("QuickInputBar._on_event failed (event=%s)", event.type)
     def _finish(self) -> None:
         self._active_id = None
+        self.stop_btn.hide()
+        self.stop_btn.setEnabled(True)
         self.prompt_edit.setEnabled(bool(self.models))
         self.prompt_edit.setFocus()
 

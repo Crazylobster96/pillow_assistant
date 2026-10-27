@@ -11,6 +11,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from pillow_assistant.core.i18n import t
+from pillow_assistant.core.project_manager import remember_binding
 from pillow_assistant.ui.config_dialog import ModelConfigDialog
 from pillow_assistant.ui.quick_input import QuickInputBar
 from pillow_assistant.ui.radial_menu import RadialMenu
@@ -19,8 +20,10 @@ from pillow_assistant.ui.radial_menu import RadialMenu
 class WindowCoordinator:
     """Own transient window references and keep them anchored to one widget."""
 
-    def __init__(self, anchor, storage, bus=None, session=None, vault=None, project_store=None) -> None:
+    def __init__(self, anchor, storage, bus=None, session=None, vault=None, project_store=None,
+                 tracker=None) -> None:
         self.anchor = anchor
+        self.tracker = tracker
         self.storage = storage
         self.bus = bus
         self.session = session
@@ -94,6 +97,14 @@ class WindowCoordinator:
     def close_multi_windows(self) -> None:
         windows = list(self.multi_windows)
         self.multi_windows = []
+        if windows and self.session is not None:
+            # The previews are gone: their files no longer ride along with questions.
+            self.session.clear_displayed()
+            if self.quick is not None:
+                try:
+                    self.quick._refresh_chips()
+                except RuntimeError:
+                    pass
         for window in windows:
             try:
                 window.close()
@@ -250,6 +261,7 @@ class WindowCoordinator:
             anchor_global=anchor_global or self.anchor_point(),
             open_reference=lambda path: self.open_file_panel([path]),
             history=self.recent_history(),
+            tracker=self.tracker,
         )
         self.set_window("quick", bar)
         bar.destroyed.connect(lambda *_, item=bar: self.clear_window("quick", item))
@@ -344,12 +356,14 @@ class WindowCoordinator:
                 self.session.session_id = (
                     sessions[0]["id"] if sessions else self.project_store.new_session_id()
                 )
+            remember_binding(self.session)
         self.open_quick_input()
 
     def on_project_deleted(self, project_id) -> None:
         if self.session is not None and getattr(self.session, "project_id", None) == project_id:
             self.session.project_id = None
             self.session.session_id = None
+            remember_binding(self.session)
 
     def open_conversation_memory(self) -> None:
         from pillow_assistant.ui.conversation_memory_panel import ConversationMemoryPanel
@@ -390,6 +404,7 @@ class WindowCoordinator:
             self.session,
             anchor_global=self.anchor_point(),
             history=self.recent_history(),
+            tracker=self.tracker,
         )
         self.set_window("panel", panel)
         panel.destroyed.connect(lambda *_, item=panel: self.clear_window("panel", item))

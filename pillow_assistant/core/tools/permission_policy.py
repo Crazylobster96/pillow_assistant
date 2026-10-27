@@ -57,12 +57,20 @@ async def authorize(tool: Any, args: dict, ctx: ToolContext) -> Optional[ToolRes
         return None
 
     name = str(getattr(tool, "name", "unknown"))
+    session = getattr(ctx, "session", None)
+    if session is not None and getattr(session, "tool_allowed", None) and session.tool_allowed(name):
+        return None
     ask = getattr(ctx, "ask", None)
     if ask is None:
         return ToolResult(ok=False, text=t("tool.permission.no_ui", name=name))
 
     allow_once = t("tool.permission.allow_once")
+    allow_conversation = t("tool.permission.allow_conversation")
     deny = t("tool.permission.deny")
+    options = [allow_once, deny]
+    if session is not None and getattr(session, "allow_tool", None):
+        # A long job calls the same few tools many times; one answer covers them.
+        options = [allow_once, allow_conversation, deny]
     permission_name = t(
         "tool.permission.network" if permission == Permission.NETWORK else "tool.permission.system"
     )
@@ -73,7 +81,7 @@ async def authorize(tool: Any, args: dict, ctx: ToolContext) -> Optional[ToolRes
             permission=permission_name,
             detail=_operation_detail(name, args),
         ),
-        "options": [allow_once, deny],
+        "options": options,
         "allow_text": False,
         "multi": False,
         "permission": permission.value,
@@ -81,6 +89,9 @@ async def authorize(tool: Any, args: dict, ctx: ToolContext) -> Optional[ToolRes
     })
     if result.get("timeout"):
         return ToolResult(ok=False, text=t("tool.permission.timeout", name=name))
-    if result.get("cancelled") or str(result.get("answer", "")).strip() != allow_once:
+    answer = str(result.get("answer", "")).strip()
+    if result.get("cancelled") or answer not in (allow_once, allow_conversation):
         return ToolResult(ok=False, text=t("tool.permission.denied", name=name))
+    if answer == allow_conversation and allow_conversation in options:
+        session.allow_tool(name)
     return None

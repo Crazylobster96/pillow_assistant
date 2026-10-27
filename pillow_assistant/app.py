@@ -50,6 +50,7 @@ class PillowAssistantApplication:
         # Projects live under ~/.pillow/projects; the session binds to one (R1).
         self.project_store = ProjectStore(Path.home() / ".pillow" / "projects")
         self.project_manager = ProjectManager(self.project_store, self.session)
+        self.project_manager.restore()
 
         # Shared 5-second undo manager (R3) — used by tools and the UI toast.
         self.undo_manager = UndoManager()

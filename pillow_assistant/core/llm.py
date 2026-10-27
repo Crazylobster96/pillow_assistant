@@ -279,6 +279,13 @@ async def _managed_request(
         return str(content or "")
 
     model_string = resolve_model_string(provider, model)
+    model_info = _model_info(litellm_module, model_string)
+    known_window = any(model_info.get(k) for k in ("max_input_tokens", "max_tokens", "max_context_tokens"))
+    configured = any(managed_context_config.get(k) for k in ("context_window", "max_input_tokens"))
+    if not known_window and not configured:
+        # Unknown to litellm and not set in the model's extra: hosted 512K, local 32K.
+        managed_context_config = {**managed_context_config,
+                                  "context_window": context_budget.default_context_window(api_base)}
     return await semantic_context.get_semantic_coordinator().manage(
         manager=context_budget.get_context_manager(),
         provider=provider,
@@ -286,7 +293,7 @@ async def _managed_request(
         model=model,
         messages=messages,
         tools=tools,
-        model_info=_model_info(litellm_module, model_string),
+        model_info=model_info,
         context_config=managed_context_config,
         completion_extra=completion_extra,
         compressor_key=profile["profile_key"],

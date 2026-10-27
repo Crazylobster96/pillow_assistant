@@ -14,6 +14,7 @@ Files are read on demand and never copied or persisted.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Iterable
 
@@ -31,6 +32,34 @@ TEXT_EXT = {
 MAX_INLINE_BYTES = 32 * 1024  # per text file
 MAX_TOTAL_BYTES = 128 * 1024  # across all inlined text
 MAX_DIR_ENTRIES = 50
+
+
+# An absolute path typed into a message: C:\dir\file.xlsx, D:/dir, /home/me/x.
+# It ends at whitespace, quotes or CJK punctuation; trailing ASCII punctuation is
+# trimmed below.
+_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|(?<![\w:/])/)[^\s\"'<>|*?，。；：、（）《》「」“”‘’]+")
+
+
+def paths_in_text(text: str) -> list[str]:
+    """Existing absolute paths written in ``text``, in order, without duplicates.
+
+    A user who types "D:/lqx/xby" means that folder; it should reach the Agent
+    like a dropped one instead of being refused as outside the workspace.
+    """
+    out: list[str] = []
+    for match in _PATH_RE.finditer(text or ""):
+        raw = match.group(0).rstrip(".,;:!)]}")
+        if len(raw) < 3:
+            continue
+        try:
+            path = Path(raw)
+            if not path.is_absolute() or not path.exists():
+                continue
+        except (OSError, ValueError):
+            continue
+        if raw not in out:
+            out.append(raw)
+    return out
 
 
 def is_image(path: Path) -> bool:

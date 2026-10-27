@@ -28,7 +28,33 @@ MESSAGE_OVERHEAD_TOKENS = 8
 CONTENT_BLOCK_OVERHEAD_TOKENS = 4
 IMAGE_ESTIMATE_TOKENS = 1600
 
-DEFAULT_CONTEXT_WINDOW = 16_384
+# For models litellm does not know (most OpenAI-compatible endpoints, e.g. qwen).
+# 16K left too little room once dozens of tool schemas were counted,
+# and compaction cut the user's request. Hosted (SaaS) models take far more, and a
+# 200-step agent run outgrows 64K; local servers (Ollama, LM Studio, vLLM on the
+# LAN) often run small windows, so they keep a conservative default.
+DEFAULT_CONTEXT_WINDOW = 32_768
+SAAS_CONTEXT_WINDOW = 524_288
+_LOCAL_HOSTS = ("localhost", "127.", "0.0.0.0", "::1", "[::1]", "10.", "192.168.", "host.docker.internal")
+
+
+def is_local_endpoint(api_base: Optional[str]) -> bool:
+    """True for a model server on this machine or the LAN (no api_base = a hosted provider)."""
+    if not api_base:
+        return False
+    from urllib.parse import urlparse
+
+    host = (urlparse(api_base if "://" in api_base else "http://" + api_base).hostname or "").lower()
+    if host.startswith("172."):
+        try:
+            return 16 <= int(host.split(".")[1]) <= 31
+        except (IndexError, ValueError):
+            return False
+    return host.endswith(".local") or any(host == h or host.startswith(h) for h in _LOCAL_HOSTS)
+
+
+def default_context_window(api_base: Optional[str]) -> int:
+    return DEFAULT_CONTEXT_WINDOW if is_local_endpoint(api_base) else SAAS_CONTEXT_WINDOW
 DEFAULT_OUTPUT_RESERVE = 4_096
 DEFAULT_SOFT_RATIO = 0.85
 DEFAULT_TARGET_RATIO = 0.72
@@ -581,6 +607,15 @@ def _largest_text_candidate(
 def _shorten_text(text: str, limit: int) -> str:
     if len(text) <= limit or limit < 80:
         return text
+    # The user's request for this turn is never cut: only the material around it.
+    req_start = text.find(REQUEST_OPEN)
+    req_end = text.find(REQUEST_CLOSE)
+    if req_start >= 0 and req_end > req_start:
+        req_end += len(REQUEST_CLOSE)
+        request = text[req_start:req_end]
+        rest = (text[:req_start].rstrip() + "\n\n" + text[req_end:].lstrip()).strip()
+        rest = _shorten_text(rest, max(80, limit - len(request) - 2)) if rest else ""
+        return (rest + "\n\n" if rest else "") + request
     state_start = text.find(PROJECT_STATE_OPEN)
     state_end = text.find(PROJECT_STATE_CLOSE)
     if state_start >= 0 and state_end > state_start:

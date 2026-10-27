@@ -27,10 +27,41 @@ def derive_name(prompt: str, limit: int = 18) -> str:
     return text if len(text) <= limit else text[:limit] + "…"
 
 
+LAST_BINDING = "last_project_session"
+
+
+def remember_binding(session) -> None:
+    """Save which project and conversation the session is in, for the next start."""
+    from pillow_assistant.core.settings import set_setting
+
+    pid = getattr(session, "project_id", None) if session is not None else None
+    try:
+        set_setting(LAST_BINDING, [pid, getattr(session, "session_id", None)] if pid else None)
+    except OSError:
+        pass
+
+
 class ProjectManager:
     def __init__(self, store: ProjectStore, session) -> None:
         self.store = store
         self.session = session
+
+    def restore(self) -> Optional[Project]:
+        """Bind a fresh session to the project it was in when the app last closed, so a
+        follow-up after a restart ("展示一下三视图") stays in that project."""
+        from pillow_assistant.core.settings import load_settings
+
+        if self.session is None or getattr(self.session, "project_id", None):
+            return None
+        saved = load_settings().get(LAST_BINDING)
+        if not (isinstance(saved, list) and len(saved) == 2 and saved[0]):
+            return None
+        project = self.store.get(str(saved[0]))
+        if project is None:
+            return None
+        self.session.project_id = project.id
+        self.session.session_id = saved[1] or self.store.new_session_id()
+        return project
 
     def resolve(self, prompt: str) -> Project:
         # NB: use `is not None` — Session defines __len__, so an empty session is
@@ -46,6 +77,12 @@ class ProjectManager:
         return project
 
     def apply(self, triage_result, prompt: str) -> Project:
+        """Resolve a project + session from a triage decision and remember it for the next start."""
+        project = self._resolve(triage_result, prompt)
+        remember_binding(self.session)
+        return project
+
+    def _resolve(self, triage_result, prompt: str) -> Project:
         """Resolve a project + session from a triage decision (continue an
         existing project or create a new one), binding both to the session.
 

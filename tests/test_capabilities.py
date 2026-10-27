@@ -37,7 +37,7 @@ def test_prompt_catalog_is_file_backed_versioned_and_strict():
     )
     assert "保留 {{literal}}" in literal_marker
     metadata = registry.metadata("shared.main_agent", language="zh")
-    assert metadata["version"] == "1.0.0"
+    assert metadata["version"] == "1.3.0"
     assert metadata["source"].endswith("main-agent.zh.md")
     assert len(metadata["sha256"]) == 64
     with pytest.raises(PromptRegistryError, match="missing variables"):

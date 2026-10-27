@@ -35,6 +35,14 @@ def _seconds(value: float) -> str:
 
 def _thousands(value: int) -> str:
     return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
+# Tools whose result is instructions or reference text for the model, not news
+# for the user: the dialog shows one line instead of the first 800 characters.
+QUIET_TOOLS = {"apply_skill", "request_project_memory"}
+
+
+def _quiet_line(name: str, args: dict, ok: bool) -> str:
+    detail = args.get("name") or args.get("path") or args.get("query") or ""
+    return t("loop.quiet_result" if ok else "loop.quiet_failed", name=name, detail=str(detail)[:80])
 
 
 class ToolLoopAgent:
@@ -294,10 +302,12 @@ class ToolLoopAgent:
             "text": summary,
             "artifacts": list(getattr(result, "artifacts", None) or []),
         })
+        quiet = tc.name in QUIET_TOOLS
+        shown = _quiet_line(tc.name, args, bool(getattr(result, "ok", False))) if quiet else summary
         await emit(AgentEvent(
             request_id=request_id,
             type=EventType.TOOL_RESULT,
-            text=summary,
+            text=shown,
             meta={
                 "name": tc.name,
                 "step": step,
@@ -315,6 +325,6 @@ class ToolLoopAgent:
             await emit(AgentEvent(request_id=request_id, type=EventType.UNDO,
                                   text=getattr(result, "undo_label", "") or t("undo.default_label"),
                                   meta={"token": token}))
-        brief = summary if len(summary) <= 800 else summary[:800] + "…"
+        brief = shown if quiet else (summary if len(summary) <= 800 else summary[:800] + "…")
         await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=brief + "\n"))
         return summary
