@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import base64
 import json
 import mimetypes
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from pillow_assistant.core import context_budget, semantic_context
 
@@ -401,8 +403,15 @@ async def complete_with_tools(
     api_base: Optional[str] = None,
     extra: Optional[dict[str, Any]] = None,
     semantic_profile: Optional[dict[str, Any]] = None,
+    on_progress: Optional[Callable[[int], Awaitable[None]]] = None,
 ) -> ToolTurn:
-    """One non-streaming completion that may request tool calls."""
+    """One completion that may request tool calls, received as a stream.
+
+    A long answer (a whole build script written in one tool call) took more than
+    the client's 10-minute request timeout and was retried from scratch. Streamed,
+    the limit is the silence between chunks (``STREAM_IDLE_S``), not the total
+    time, and ``on_progress`` hears how many characters have arrived so far.
+    """
     import litellm
 
     model_string = resolve_model_string(provider, model)
@@ -432,7 +441,7 @@ async def complete_with_tools(
         kwargs.update(completion_extra)
 
     try:
-        response = await litellm.acompletion(**kwargs)
+        response = await _streamed_tool_turn(litellm, kwargs, on_progress)
     except Exception as exc:
         if not _is_context_length_error(exc):
             raise
@@ -450,21 +459,73 @@ async def complete_with_tools(
             emergency=True,
         )
         kwargs["messages"] = managed.messages
-        response = await litellm.acompletion(**kwargs)
+        response = await _streamed_tool_turn(litellm, kwargs, on_progress)
 
-    message = response.choices[0].message
-    calls: list[ToolCall] = []
-    for tc in (getattr(message, "tool_calls", None) or []):
-        calls.append(ToolCall(id=tc.id, name=tc.function.name, arguments=tc.function.arguments or "{}"))
-    usage = _usage_dict(getattr(response, "usage", None))
+    content, calls, usage = response
     manager.observe(managed, _actual_input_tokens(usage))
     return ToolTurn(
-        content=getattr(message, "content", None),
+        content=content,
         tool_calls=calls,
         usage=usage,
         context_stats=managed.diagnostics(),
         managed_messages=managed.messages,
     )
+
+
+STREAM_IDLE_S = 300  # no new chunk for this long: the request is given up
+
+
+async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
+    """(content, tool calls, usage) from a streamed completion."""
+    kwargs = {**kwargs, "stream": True, "stream_options": {"include_usage": True}, "timeout": STREAM_IDLE_S}
+    stream = await litellm.acompletion(**kwargs)
+    if not hasattr(stream, "__aiter__"):  # a whole response after all (some endpoints, test doubles)
+        message = stream.choices[0].message
+        calls = [ToolCall(id=tc.id, name=tc.function.name, arguments=tc.function.arguments or "{}")
+                 for tc in (getattr(message, "tool_calls", None) or [])]
+        return getattr(message, "content", None), calls, _usage_dict(getattr(stream, "usage", None))
+    text: list[str] = []
+    calls: dict[int, dict] = {}
+    usage: dict = {}
+    received = 0
+    last_report = 0
+    iterator = stream.__aiter__()
+    while True:
+        try:
+            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=STREAM_IDLE_S)
+        except StopAsyncIteration:
+            break
+        if getattr(chunk, "usage", None):
+            usage = _usage_dict(chunk.usage) or usage
+        for choice in getattr(chunk, "choices", None) or []:
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+            piece = getattr(delta, "content", None)
+            if piece:
+                text.append(piece)
+                received += len(piece)
+            for tc in getattr(delta, "tool_calls", None) or []:
+                slot = calls.setdefault(getattr(tc, "index", 0) or 0, {"id": None, "name": "", "args": []})
+                if getattr(tc, "id", None):
+                    slot["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn is not None:
+                    if getattr(fn, "name", None):
+                        slot["name"] = fn.name
+                    if getattr(fn, "arguments", None):
+                        slot["args"].append(fn.arguments)
+                        received += len(fn.arguments)
+        if on_progress is not None and received - last_report >= 400:
+            last_report = received
+            try:
+                await on_progress(received)
+            except Exception:  # noqa: BLE001 - progress is cosmetic
+                pass
+    tool_calls = [ToolCall(id=slot["id"] or f"call_{index}", name=slot["name"],
+                           arguments="".join(slot["args"]) or "{}")
+                  for index, slot in sorted(calls.items()) if slot["name"]]
+    return ("".join(text) or None), tool_calls, usage
 
 
 async def complete(

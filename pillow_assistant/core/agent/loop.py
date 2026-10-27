@@ -133,11 +133,17 @@ class ToolLoopAgent:
             self._step = step
             self._drop_images(messages, step=step)
             t0 = time.time()
+
+            async def progress(chars: int, _step=step, _t0=t0) -> None:
+                await emit(AgentEvent(request_id=request_id, type=EventType.TOOL_START, text="", meta={
+                    "status": t("loop.generating", step=_step, total=self.max_steps, chars=chars,
+                                seconds=int(time.time() - _t0))}))
+
             try:
                 turn = await llm.complete_with_tools(
                     provider=provider, model=model, messages=messages, tools=offered(),
                     api_key=self.api_key, api_base=api_base, extra=extra,
-                    semantic_profile=semantic_profile,
+                    semantic_profile=semantic_profile, on_progress=progress,
                 )
             except Exception:
                 if not self._image_messages:
