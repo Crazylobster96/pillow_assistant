@@ -137,9 +137,10 @@ class ToolLoopAgent:
             self._drop_images(messages, step=step)
             t0 = time.time()
 
-            async def progress(chars: int, _step=step, _t0=t0) -> None:
+            async def progress(chars: int, thinking: int = 0, _step=step, _t0=t0) -> None:
+                key = "loop.generating" if chars else "loop.thinking"
                 await emit(AgentEvent(request_id=request_id, type=EventType.TOOL_START, text="", meta={
-                    "status": t("loop.generating", step=_step, total=self.max_steps, chars=chars,
+                    "status": t(key, step=_step, total=self.max_steps, chars=chars or thinking,
                                 seconds=int(time.time() - _t0))}))
 
             try:

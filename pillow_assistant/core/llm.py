@@ -403,7 +403,7 @@ async def complete_with_tools(
     api_base: Optional[str] = None,
     extra: Optional[dict[str, Any]] = None,
     semantic_profile: Optional[dict[str, Any]] = None,
-    on_progress: Optional[Callable[[int], Awaitable[None]]] = None,
+    on_progress: Optional[Callable[[int, int], Awaitable[None]]] = None,
 ) -> ToolTurn:
     """One completion that may request tool calls, received as a stream.
 
@@ -488,6 +488,7 @@ async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
     calls: dict[int, dict] = {}
     usage: dict = {}
     received = 0
+    thinking = 0  # reasoning models (qwen3, deepseek-r1) stream their thinking first
     last_report = 0
     iterator = stream.__aiter__()
     while True:
@@ -501,6 +502,9 @@ async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
             delta = getattr(choice, "delta", None)
             if delta is None:
                 continue
+            thought = getattr(delta, "reasoning_content", None)
+            if thought:
+                thinking += len(thought)
             piece = getattr(delta, "content", None)
             if piece:
                 text.append(piece)
@@ -516,10 +520,10 @@ async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
                     if getattr(fn, "arguments", None):
                         slot["args"].append(fn.arguments)
                         received += len(fn.arguments)
-        if on_progress is not None and received - last_report >= 400:
-            last_report = received
+        if on_progress is not None and received + thinking - last_report >= 400:
+            last_report = received + thinking
             try:
-                await on_progress(received)
+                await on_progress(received, thinking)
             except Exception:  # noqa: BLE001 - progress is cosmetic
                 pass
     tool_calls = [ToolCall(id=slot["id"] or f"call_{index}", name=slot["name"],
