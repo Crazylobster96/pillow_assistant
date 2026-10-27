@@ -67,6 +67,7 @@ class ToolLoopAgent:
         image_paths: Optional[list[str]] = None,
         history: Optional[list[dict]] = None,
         resume_messages: Optional[list[dict]] = None,
+        skill: str = "",
     ) -> str:
         provider = self.cfg.get("provider", "")
         model = self.cfg.get("model") or ""
@@ -124,6 +125,8 @@ class ToolLoopAgent:
         self._step = 0
         self.last_managed_messages: Optional[list[dict[str, Any]]] = None
         self._reactivate_skill_tools(messages)
+        if skill and not resume_messages:
+            await self._preapply_skill(skill, messages, emit, request_id)
         self._vision = llm.supports_vision(provider, model, extra)
         self._image_messages: list[tuple[int, int, str]] = []  # (message index, step, paths)
         self._call_nudges = 0
@@ -254,6 +257,23 @@ class ToolLoopAgent:
         if audit is not None and hasattr(audit, "_write"):
             audit._write({"kind": "llm_call", "step": step, "ms": int(seconds * 1000),
                           "input_tokens": tokens_in, "output_tokens": tokens_out})
+
+    async def _preapply_skill(self, skill: str, messages: list, emit: Emit, request_id: str) -> None:
+        """Start the run with the skill triage picked already applied: its instructions in the
+        transcript and its tools unlocked, instead of hoping the model asks for it."""
+        args = {"name": skill}
+        result = await self.registry.dispatch("apply_skill", args, self.ctx)
+        audit = getattr(self.ctx, "audit", None)
+        if audit is not None and hasattr(audit, "_write"):
+            audit._write({"kind": "skill_preapplied", "skill": skill, "ok": bool(result.ok)})
+        if not result.ok:
+            return
+        call_id = "preapplied_skill"
+        messages.append({"role": "assistant", "content": "", "tool_calls": [{
+            "id": call_id, "type": "function",
+            "function": {"name": "apply_skill", "arguments": json.dumps(args, ensure_ascii=False)}}]})
+        messages.append({"role": "tool", "tool_call_id": call_id, "content": result.text})
+        await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=t("loop.skill_preapplied", name=skill)))
 
     def _reactivate_skill_tools(self, messages: list) -> None:
         """A resumed run ("继续") keeps the tools its skills already unlocked."""

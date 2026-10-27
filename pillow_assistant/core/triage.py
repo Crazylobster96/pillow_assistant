@@ -32,6 +32,7 @@ class TriageResult:
     rationale: str = ""
     prejudge: str = ""  # the keyword first pass shown to the model
     prejudge_ok: Optional[bool] = None  # whether the model kept it
+    skill: str = ""  # the skill the run should start with ("" = none); loaded before the first step
 
     @property
     def is_chat(self) -> bool:
@@ -112,22 +113,35 @@ def parse_triage(text: str, valid_ids: set[str]) -> TriageResult:
     rationale = str(data.get("rationale", ""))
     kept = data.get("prejudge_ok")
     kept = kept if isinstance(kept, bool) else None
+    skill = str(data.get("skill") or "").strip()
+    skill = "" if skill.lower() in ("null", "none", "-") else skill
 
     if action == "continue" and pid in valid_ids:
         return TriageResult(action="continue", project_id=pid, confidence=conf, rationale=rationale,
-                            prejudge_ok=kept)
+                            prejudge_ok=kept, skill=skill)
     if action == "new":
         return TriageResult(action="new", name=data.get("name"), confidence=conf, rationale=rationale,
-                            prejudge_ok=kept)
-    return TriageResult(action="chat", confidence=conf, rationale=rationale, prejudge_ok=kept)
+                            prejudge_ok=kept, skill=skill)
+    return TriageResult(action="chat", confidence=conf, rationale=rationale, prejudge_ok=kept, skill=skill)
 
 
 def _system_prompt() -> str:
     return render_prompt("routing.project_triage.system")
 
 
+_EXCEL_RE = re.compile(r"excel|xlsx|表格|工作簿|sheet", re.IGNORECASE)
+
+
+def guess_skill(prompt: str, skills: list[str]) -> str:
+    """The skill keywords point to, among those available ("" when none)."""
+    if _EXCEL_RE.search(prompt or "") and "excel" in skills:
+        return "excel"
+    return ""
+
+
 async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional[str],
-                 current_id: Optional[str] = None, current_context: str = "") -> TriageResult:
+                 current_id: Optional[str] = None, current_context: str = "",
+                 skills: Optional[list[tuple[str, str]]] = None) -> TriageResult:
     """Classify ``prompt`` (chat / continue / new) by the model's reading of its intent.
 
     ``current_context`` is the current project's last exchange, so a short
@@ -146,8 +160,15 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
     else:
         hint = "\n\n当前没有打开的项目。"
     guess = prejudge(prompt, index, current)
+    skill_names = [name for name, _ in (skills or [])]
+    skill_guess = guess_skill(prompt, skill_names)
+    if skill_guess:
+        guess["why"] = list(guess["why"]) + [f"建议先加载技能 {skill_guess}"]
     first_pass = guess["guess"] + (f"（依据：{'；'.join(guess['why'])}）" if guess["why"] else "")
     hint += f"\n\n关键词初判：{first_pass}。请核对：准确就照此判断，不准确就按你的理解调整。"
+    if skills:
+        hint += "\n\n可用技能（选一个本次应先加载的，填进 skill；用不到就填 null）：\n" + "\n".join(
+            f"- {name}：{desc}" for name, desc in skills)
     messages = [
         {"role": "system", "content": _system_prompt()},
         {"role": "user", "content": join_context_and_prompt(
@@ -166,18 +187,20 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
         action = guess.get("action")
         if action == "continue" and guess.get("project_id"):
             return TriageResult(action="continue", project_id=guess["project_id"], confidence=0.5,
-                                rationale="triage-failed", prejudge=first_pass)
+                                rationale="triage-failed", prejudge=first_pass, skill=skill_guess)
         if action == "new":
             return TriageResult(action="new", name=derive_name(prompt), confidence=0.5, rationale="triage-failed",
-                                prejudge=first_pass)
+                                prejudge=first_pass, skill=skill_guess)
         if action == "chat" or current is None:
-            return TriageResult(action="chat", confidence=0.0, rationale="triage-failed", prejudge=first_pass)
+            return TriageResult(action="chat", confidence=0.0, rationale="triage-failed", prejudge=first_pass, skill=skill_guess)
         return TriageResult(action="continue", project_id=str(current["id"]), confidence=0.5,
-                            rationale="triage-failed", prejudge=first_pass)
+                            rationale="triage-failed", prejudge=first_pass, skill=skill_guess)
 
     valid_ids = {str(p["id"]) for p in index}
     result = parse_triage(text, valid_ids)
     result.prejudge = first_pass
+    if result.skill and result.skill not in skill_names:
+        result.skill = ""
     if result.action == "new" and not result.name:
         result.name = derive_name(prompt)
     return result
