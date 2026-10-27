@@ -37,7 +37,12 @@ class PillowAssistantApplication:
         self.qt_app = QApplication(sys.argv)
         self.qt_app.setApplicationName("Pillow Assistant")
         self.qt_app.setQuitOnLastWindowClosed(False)
-        self.qt_app.setWindowIcon(QIcon())
+        from pillow_assistant.ui.icon_assets import app_icon
+        from pillow_assistant.core.app_icon import refresh_bundle_icon, set_app_user_model_id
+
+        set_app_user_model_id()  # the taskbar shows Pillow's icon, not pythonw's
+        self.qt_app.setWindowIcon(app_icon())
+        refresh_bundle_icon()  # shortcuts follow the icon an update brings
 
         # Current session holds referenced files/folders + the bound project.
         self.session = Session()

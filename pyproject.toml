@@ -79,6 +79,7 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
+"pillow_assistant.ui" = ["assets/*.png"]
 "pillow_assistant.capabilities" = [
     "prompts/catalog.json",
     "prompts/*/*.md",

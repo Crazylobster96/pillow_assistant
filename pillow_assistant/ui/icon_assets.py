@@ -17,7 +17,28 @@ from PySide6.QtGui import (
 )
 
 
+PILLOW_IMAGE = Path(__file__).with_name("assets") / "pillow.png"
+
+
 def create_pillow_icon(size: int) -> QPixmap:
+    """The app's pillow icon at ``size`` px: the bundled artwork, or a drawn one if it is missing."""
+    art = QPixmap(str(PILLOW_IMAGE)) if PILLOW_IMAGE.is_file() else QPixmap()
+    if not art.isNull():
+        return art.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return draw_pillow_icon(size)
+
+
+def app_icon():
+    """A QIcon with the pillow at the sizes Windows asks for (title bar, taskbar, Alt+Tab)."""
+    from PySide6.QtGui import QIcon
+
+    icon = QIcon()
+    for size in (16, 20, 24, 32, 40, 48, 64, 96, 128, 256):
+        icon.addPixmap(create_pillow_icon(size))
+    return icon
+
+
+def draw_pillow_icon(size: int) -> QPixmap:
     """Draw a soft plush pillow with a gentle cool gradient."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
