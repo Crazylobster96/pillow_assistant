@@ -30,6 +30,8 @@ class TriageResult:
     name: Optional[str] = None
     confidence: float = 0.0
     rationale: str = ""
+    prejudge: str = ""  # the keyword first pass shown to the model
+    prejudge_ok: Optional[bool] = None  # whether the model kept it
 
     @property
     def is_chat(self) -> bool:
@@ -58,6 +60,27 @@ def is_app_setting_request(prompt: str) -> bool:
     text = re.sub(r"\s+", " ", prompt or "").strip()
     return bool(text) and any(re.search(pattern, text, re.IGNORECASE) for pattern in _APP_SETTING_PATTERNS)
 
+_NEW_RE = re.compile(r"^(?:帮我|请)?(?:做|设计|画|新建|建|写|生成|创建|整理|搭)(?:一|个|款|套|份|张|块)")
+_QUESTION_RE = re.compile(r"(?:吗|么|呢|多大|多少|怎么样?|如何|为什么|是什么|是不是|好不好|[?？])\s*$")
+_REFERS_RE = re.compile(r"这个|这块|这张|这份|刚才|上次|继续|再|也|改成|改大|改小|调成|展示|导出|出[个张一]?")
+
+
+def prejudge(prompt: str, index: list[dict], current: Optional[dict]) -> dict:
+    """A quick keyword guess, handed to the model as a first pass it confirms or overrides."""
+    text = re.sub(r"\s+", "", prompt or "")
+    why = []
+    named = next((p for p in index if p.get("name") and str(p["name"]) in text), None)
+    if named is not None and current is not None and named["id"] != current["id"]:
+        return {"guess": f"延续「{named['name']}」", "why": why + ["提到了这个项目的名字"]}
+    if _NEW_RE.match(text):
+        return {"guess": "新建项目", "why": why + ["以「做/设计/新建一个」开头"]}
+    if _QUESTION_RE.search(text) and len(text) <= 30 and not _REFERS_RE.search(text):
+        return {"guess": "闲聊（一问一答）", "why": why + ["是个简短的问题，没有指代当前工作"]}
+    if current is not None and (len(text) <= 20 or _REFERS_RE.search(text)):
+        return {"guess": f"延续当前项目「{current['name']}」", "why": why + ["没有说出新对象，或用了「这块/再/展示/导出」等指代"]}
+    return {"guess": "不确定", "why": why}
+
+
 def derive_name(prompt: str, limit: int = 18) -> str:
     text = (prompt or "").strip().splitlines()[0] if prompt.strip() else ""
     text = re.sub(r"\s+", " ", text).strip()
@@ -85,12 +108,16 @@ def parse_triage(text: str, valid_ids: set[str]) -> TriageResult:
     except (TypeError, ValueError):
         conf = 0.0
     rationale = str(data.get("rationale", ""))
+    kept = data.get("prejudge_ok")
+    kept = kept if isinstance(kept, bool) else None
 
     if action == "continue" and pid in valid_ids:
-        return TriageResult(action="continue", project_id=pid, confidence=conf, rationale=rationale)
+        return TriageResult(action="continue", project_id=pid, confidence=conf, rationale=rationale,
+                            prejudge_ok=kept)
     if action == "new":
-        return TriageResult(action="new", name=data.get("name"), confidence=conf, rationale=rationale)
-    return TriageResult(action="chat", confidence=conf, rationale=rationale)
+        return TriageResult(action="new", name=data.get("name"), confidence=conf, rationale=rationale,
+                            prejudge_ok=kept)
+    return TriageResult(action="chat", confidence=conf, rationale=rationale, prejudge_ok=kept)
 
 
 def _system_prompt() -> str:
@@ -116,6 +143,9 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
             hint += f"\n上一轮对话：\n{current_context}"
     else:
         hint = "\n\n当前没有打开的项目。"
+    guess = prejudge(prompt, index, current)
+    first_pass = guess["guess"] + (f"（依据：{'；'.join(guess['why'])}）" if guess["why"] else "")
+    hint += f"\n\n关键词初判：{first_pass}。请核对：准确就照此判断，不准确就按你的理解调整。"
     messages = [
         {"role": "system", "content": _system_prompt()},
         {"role": "user", "content": join_context_and_prompt(
@@ -137,6 +167,7 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
 
     valid_ids = {str(p["id"]) for p in index}
     result = parse_triage(text, valid_ids)
+    result.prejudge = first_pass
     if result.action == "new" and not result.name:
         result.name = derive_name(prompt)
     return result

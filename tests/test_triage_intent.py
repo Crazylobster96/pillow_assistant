@@ -27,3 +27,20 @@ def test_triage_sees_the_current_project_and_its_last_exchange(monkeypatch):
     monkeypatch.setattr(llm, "complete", broken)
     result = asyncio.run(triage_mod.triage("再加一列", INDEX, cfg={}, api_key=None, current_id="p1"))
     assert (result.action, result.project_id) == ("continue", "p1")
+
+
+def test_a_keyword_first_pass_goes_to_the_model_which_may_override_it(monkeypatch):
+    guess = lambda text: triage_mod.prejudge(text, INDEX, INDEX[0])["guess"]  # noqa: E731
+    assert guess("再加一列") == "延续当前项目「协保员表」"
+    assert guess("周报再补一段") == "延续「周报」"
+    assert guess("做一个新的排班表") == "新建项目"
+    assert guess("Excel 怎么冻结首行？") == "闲聊（一问一答）"
+    seen = {}
+
+    async def classifier(**kwargs):
+        seen["user"] = kwargs["messages"][-1]["content"]
+        return '{"action":"chat","prejudge_ok":false,"confidence":0.9}'
+
+    monkeypatch.setattr(llm, "complete", classifier)
+    result = asyncio.run(triage_mod.triage("再加一列", INDEX, cfg={}, api_key=None, current_id="p1"))
+    assert "关键词初判：延续当前项目「协保员表」" in seen["user"] and result.prejudge_ok is False
