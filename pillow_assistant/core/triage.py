@@ -98,17 +98,24 @@ def _system_prompt() -> str:
 
 
 async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional[str],
-                 current_id: Optional[str] = None) -> TriageResult:
-    """Classify ``prompt`` (chat / continue / new) via the configured model."""
+                 current_id: Optional[str] = None, current_context: str = "") -> TriageResult:
+    """Classify ``prompt`` (chat / continue / new) by the model's reading of its intent.
+
+    ``current_context`` is the current project's last exchange, so a short
+    follow-up ("把刚才的表再加一列") can be read against it."""
     if is_app_setting_request(prompt):
         return TriageResult(action="chat", confidence=1.0, rationale="app-setting")
     listing = "\n".join(
         f'- id={p["id"]} 名称="{p.get("name","")}" 最近="{(p.get("last_prompt") or "")[:60]}"'
         for p in index[:20]
     ) or "（暂无项目）"
-    hint = ""
-    if current_id:
-        hint = f"\n当前正在进行的项目 id={current_id}（若是它的延续工作，倾向 continue 该 id）。"
+    current = next((p for p in index if str(p["id"]) == str(current_id)), None) if current_id else None
+    if current is not None:
+        hint = f'\n\n当前项目：id={current["id"]} 名称="{current.get("name", "")}"'
+        if current_context:
+            hint += f"\n上一轮对话：\n{current_context}"
+    else:
+        hint = "\n\n当前没有打开的项目。"
     messages = [
         {"role": "system", "content": _system_prompt()},
         {"role": "user", "content": join_context_and_prompt(
@@ -123,6 +130,9 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
             extra=llm.parse_extra(cfg.get("extra")),
         )
     except Exception:
+        if current is not None:  # no classifier: stay with the work at hand
+            return TriageResult(action="continue", project_id=str(current["id"]), confidence=0.5,
+                                rationale="triage-failed")
         return TriageResult(action="chat", confidence=0.0, rationale="triage-failed")
 
     valid_ids = {str(p["id"]) for p in index}

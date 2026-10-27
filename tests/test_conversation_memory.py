@@ -160,7 +160,7 @@ def test_orchestrator_chat_integration():
         original_complete = llm.complete
         original_cwt = llm.complete_with_tools
 
-        async def fake_triage(prompt, index, *, cfg, api_key, current_id=None):
+        async def fake_triage(prompt, index, *, cfg, api_key, current_id=None, **_):
             return TriageResult(action="chat", confidence=1.0)
 
         async def fake_complete(**kwargs):

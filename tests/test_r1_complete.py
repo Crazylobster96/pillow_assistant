@@ -89,7 +89,7 @@ def test_apply_sessions():
 
 
 def _patch_fakes(triage_action, captured):
-    async def fake_triage(prompt, index, *, cfg, api_key, current_id=None):
+    async def fake_triage(prompt, index, *, cfg, api_key, current_id=None, **_):
         if triage_action == "continue" and index:
             return TriageResult(action="continue", project_id=index[0]["id"], confidence=0.95)
         return TriageResult(action=triage_action, name="新", confidence=0.95)
@@ -180,7 +180,7 @@ def test_low_confidence_switch_does_not_shadow_triage_result():
     import pillow_assistant.core.orchestrator as orch
     original_triage = orch.triage
 
-    async def fake_triage(prompt, index, *, cfg, api_key, current_id=None):
+    async def fake_triage(prompt, index, *, cfg, api_key, current_id=None, **_):
         return TriageResult(
             action="continue", project_id=index[0]["id"], confidence=0.5
         )
