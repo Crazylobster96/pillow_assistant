@@ -7,6 +7,7 @@ from pillow_assistant.core import llm
 
 
 def _chunks():
+    yield NS(choices=[NS(delta=NS(content=None, reasoning_content="想" * 500, tool_calls=None))], usage=None)
     yield NS(choices=[NS(delta=NS(content="先写脚本。", tool_calls=None))], usage=None)
     yield NS(choices=[NS(delta=NS(content=None, tool_calls=[
         NS(index=0, id="call_1", function=NS(name="file_write", arguments='{"path": "a.mjs", '))]))], usage=None)
@@ -39,12 +40,12 @@ def test_stream_is_assembled_into_content_calls_and_usage():
 
     progress = []
 
-    async def on_progress(chars):
-        progress.append(chars)
+    async def on_progress(chars, thinking=0):
+        progress.append((chars, thinking))
 
     content, calls, usage = asyncio.run(llm._streamed_tool_turn(NS(acompletion=acompletion), {"model": "m"}, on_progress))
     assert seen["stream"] is True and seen["timeout"] == llm.STREAM_IDLE_S
     assert content == "先写脚本。"
     assert [(c.id, c.name) for c in calls] == [("call_1", "file_write")]
     assert calls[0].arguments.startswith('{"path": "a.mjs", "x')
-    assert usage.get("prompt_tokens") == 10 and progress
+    assert usage.get("prompt_tokens") == 10 and progress[0] == (0, 500)  # thinking is reported too

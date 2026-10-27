@@ -143,6 +143,17 @@ class Orchestrator:
         except OSError:
             pass
 
+    def _skill_menu(self) -> list[tuple[str, str]]:
+        """(name, first sentence of its description) for every skill, for triage to pick from."""
+        try:
+            from pillow_assistant.capabilities.skill_registry import CapabilitySkillRegistry
+
+            skills = CapabilitySkillRegistry().load()
+        except Exception:  # noqa: BLE001 - a broken skill must not stop triage
+            return []
+        return [(skill.name, " ".join(str(skill.description or "").split()).split(". ")[0][:110])
+                for skill in skills]
+
     def _last_exchange(self, project_id, limit: int = 400) -> str:
         """The current project's last request and answer, for triage to read a short
         follow-up against."""
@@ -246,7 +257,7 @@ class Orchestrator:
         index = self.pm.store.index()
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session is not None else None
         tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id,
-                          current_context=self._last_exchange(current_id))
+                          current_context=self._last_exchange(current_id), skills=self._skill_menu())
 
         # A paused run only resumes on an explicit continuation request. Check
         # both the in-memory fast path and the persistent Level-1 transcript.
@@ -342,7 +353,7 @@ class Orchestrator:
         final_text = await agent.run(
             prompt=request.prompt, emit=emit, request_id=request.id,
             context=final_context, image_paths=image_paths or None, history=history,
-            resume_messages=resume_messages,
+            resume_messages=resume_messages, skill=getattr(tr, "skill", ""),
         )
         hit_limit = bool(getattr(agent, "reached_limit", False))
         if hit_limit:

@@ -56,3 +56,39 @@ def test_without_the_model_the_keyword_first_pass_decides(monkeypatch):
     assert run("做一个新的排班表").action == "new"
     assert run("Excel 怎么冻结首行？").action == "chat"
     assert run("再加一列").project_id == "p1"
+
+
+def test_an_excel_request_starts_with_the_excel_skill_loaded(monkeypatch, tmp_path):
+    from pillow_assistant.core.agent.loop import ToolLoopAgent
+    from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
+    from pillow_assistant.core.tools.registry import ToolRegistry
+    from pillow_assistant.core.triage import guess_skill
+
+    assert guess_skill("把表格里合肥的顺序调一下", ["excel"]) == "excel"
+    assert guess_skill("今天天气怎么样", ["excel"]) == ""
+
+    class Skill:
+        name, description, permission = "apply_skill", "skill", Permission.READONLY
+        parameters = {"type": "object", "properties": {"name": {"type": "string"}}}
+
+        async def __call__(self, args, ctx):
+            ctx.active_tools.update({"excel_edit"})
+            return ToolResult(ok=True, text="【技能 excel】按段重排……")
+
+    registry = ToolRegistry()
+    registry.register(Skill())
+    seen = []
+
+    async def fake(**kwargs):
+        seen.append(kwargs["messages"])
+        return llm.ToolTurn(content="done")
+
+    monkeypatch.setattr(llm, "complete_with_tools", fake)
+    ctx = ToolContext(workspace=str(tmp_path))
+
+    async def emit(event):
+        pass
+
+    agent = ToolLoopAgent({"provider": "openai", "model": "m"}, None, registry, ctx, max_steps=2)
+    asyncio.run(agent.run(prompt="调整表格顺序", emit=emit, request_id="r", skill="excel"))
+    assert seen[0][-1]["content"].startswith("【技能 excel】") and "excel_edit" in ctx.active_tools
