@@ -104,7 +104,7 @@ class FilePanel(QFrame):
     RESIZE_MARGIN = 7  # px band at the window edges that triggers drag-resize
 
     def __init__(self, paths, storage, bus, session, anchor_global=None, parent=None,
-                 history=None, show_dialog=True, tracker=None) -> None:
+                 history=None, show_dialog=True, tracker=None, as_reference=True) -> None:
         super().__init__(parent)
         self.paths = [str(Path(p)) for p in paths]
         self.storage = storage
@@ -118,7 +118,7 @@ class FilePanel(QFrame):
         # Preview-only panels (tiled multi-window compare) must not touch the
         # session references: registering every shown file as a reference made
         # chips pile up and effectively "expanded" dropped folders for good.
-        if self.session is not None and show_dialog:
+        if self.session is not None and show_dialog and as_reference:
             for p in self.paths:
                 self.session.add_reference(p)
 

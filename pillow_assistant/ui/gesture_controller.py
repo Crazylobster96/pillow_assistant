@@ -36,6 +36,11 @@ class GestureController(QObject):
         self._long_timer = QTimer(self)
         self._long_timer.setSingleShot(True)
         self._long_timer.timeout.connect(self._begin_recording)
+        # A release can be lost (another window takes the mouse); then the icon
+        # stayed red and the microphone kept recording.
+        self._held = QTimer(self)
+        self._held.setInterval(200)
+        self._held.timeout.connect(self._check_still_held)
         target.installEventFilter(self)
 
     def eventFilter(self, obj, event):  # noqa: N802
@@ -73,6 +78,7 @@ class GestureController(QObject):
             if previous == GestureState.PRESSED:
                 self.clicked.emit()
             elif previous == GestureState.RECORDING:
+                self._held.stop()
                 self.recording_finished.emit()
             elif previous == GestureState.DRAGGING:
                 self.drag_finished.emit()
@@ -83,4 +89,16 @@ class GestureController(QObject):
         if self.state != GestureState.PRESSED:
             return
         self.state = GestureState.RECORDING
+        self._held.start()
         self.recording_started.emit()
+
+    def _check_still_held(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+
+        if self.state != GestureState.RECORDING:
+            self._held.stop()
+            return
+        if not QGuiApplication.mouseButtons() & Qt.LeftButton:
+            self._held.stop()
+            self.state = GestureState.IDLE
+            self.recording_finished.emit()

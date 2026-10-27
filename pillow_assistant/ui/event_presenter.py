@@ -152,6 +152,7 @@ class EventPresenter:
                     )
                 except Exception:
                     continue
+            window.shown_path = path or None
             window.destroyed.connect(
                 lambda *_, item=window: self.coordinator.remove_multi_window(item)
             )

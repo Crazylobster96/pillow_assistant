@@ -285,8 +285,12 @@ class QuickInputBar(QFrame):
         name_btn.setStyleSheet("QPushButton { background: transparent; border: none; text-align: left; }")
         name_btn.clicked.connect(lambda: self._open_reference(path))
         lay.addWidget(name_btn)
-        remove = QPushButton("×", chip)
-        remove.setFixedSize(18, 18)
+        remove = QPushButton("✕", chip)
+        remove.setFixedSize(22, 22)
+        remove.setToolTip(t("chip.remove"))
+        remove.setCursor(Qt.PointingHandCursor)
+        remove.setStyleSheet("QPushButton { font-size: 12px; padding: 0; border-radius: 11px; }"
+                             "QPushButton:hover { background: rgba(255,255,255,60); }")
         remove.clicked.connect(lambda: self._remove_ref(path, displayed))
         lay.addWidget(remove)
         return chip
