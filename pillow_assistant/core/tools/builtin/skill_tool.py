@@ -8,6 +8,11 @@ from pillow_assistant.core.i18n import t
 from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 
 
+def skill_tools(skill) -> set:
+    """Tools a skill works with (held back from the model until the skill is applied)."""
+    return set(getattr(skill, "resolved_tools", None) or skill.tools or [])
+
+
 class SkillTool:
     name = "apply_skill"
     permission = Permission.READONLY
@@ -39,5 +44,8 @@ class SkillTool:
         children = getattr(skill, "children", None)
         if children:
             instructions = t("tool.skill.merged", names="、".join(children)) + "\n\n" + instructions
+        active = getattr(ctx, "active_tools", None)
+        if isinstance(active, set):
+            active.update(skill_tools(skill))
         return ToolResult(ok=True, text=t("tool.skill.applied", name=skill.name,
                                           instructions=instructions))

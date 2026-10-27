@@ -42,6 +42,7 @@ class ToolContext:
     project_id: Optional[str] = None        # active project id, absent for one-off chat
     memory_request_count: int = 0           # bounded retrievals in the current Agent turn
     skill_snapshot: list = field(default_factory=list)  # request-local resolved Skill metadata
+    active_tools: set = field(default_factory=set)  # skill-only tools unlocked by apply_skill this run
 
 
 @dataclass
@@ -49,6 +50,7 @@ class ToolResult:
     ok: bool
     text: str                       # fed back to the model
     artifacts: list[str] = field(default_factory=list)
+    images: list[str] = field(default_factory=list)  # image files the model should look at
     undo_token: Optional[str] = None  # if set, the action can be undone (5s window)
     undo_label: str = ""
 

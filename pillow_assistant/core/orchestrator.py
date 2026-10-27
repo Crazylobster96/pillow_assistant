@@ -22,6 +22,9 @@ from pillow_assistant.core.triage import TriageResult, triage
 
 Emit = Callable[[AgentEvent], Awaitable[None]]
 CHAT_MEMORY_TURNS = 12
+# Always offered, even when a skill lists them too.
+CORE_TOOLS = {"run_python", "file_read", "file_write", "file_list", "ask_user", "apply_skill",
+              "present_windows", "http_request", "browser_read", "run_cli"}
 # Auto-switch the conversation into a *different* past project only when triage
 # is confident enough; below this it keeps chatting (no switch). 0.8 balances
 # responsiveness against mis-switches (LLM confidence clusters at 0.7/0.8/0.9).
@@ -130,7 +133,7 @@ class Orchestrator:
     def _registry_for(self, project_root: Path | None = None):
         """Build a request-local registry and resolve layered Skills without cross-run leakage."""
         from pillow_assistant.capabilities.skill_registry import CapabilitySkillRegistry
-        from pillow_assistant.core.tools.builtin.skill_tool import SkillTool
+        from pillow_assistant.core.tools.builtin.skill_tool import SkillTool, skill_tools
 
         registry = self.registry.clone()
         project_skills = project_root / ".pillow" / "skills" if project_root is not None else None
@@ -139,6 +142,10 @@ class Orchestrator:
         mode = "project" if project_root is not None else "chat"
         if skills:
             registry.register(SkillTool(skills, available_tools=registry.names(mode)))
+            # Tools only a skill uses (cadgen, CAM, slicers, Anatomy, excel) are not
+            # sent until apply_skill picks that skill: ~20 fewer schemas on every step.
+            used = set().union(*(skill_tools(s) for s in skills))
+            registry.skill_only = used - CORE_TOOLS
         return registry, catalog.snapshot()
 
     async def _ensure_mcp(self) -> None:

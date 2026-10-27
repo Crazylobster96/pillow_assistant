@@ -11,6 +11,7 @@ from pillow_assistant.core.i18n import t
 from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 
 MAX_READ = 60 * 1024
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
 
 def _under(base: Path, target: Path) -> bool:
@@ -49,6 +50,9 @@ class FileReadTool:
             return ToolResult(ok=False, text=t("tool.fr.denied", path=raw))
         if not p.exists() or not p.is_file():
             return ToolResult(ok=False, text=t("tool.fr.not_found", path=raw))
+        if p.suffix.lower() in IMAGE_SUFFIXES:
+            # The agent loop attaches it as an image when the model can see images.
+            return ToolResult(ok=True, text=t("tool.fr.image", path=raw), images=[str(p)])
         try:
             text = p.read_text("utf-8", errors="replace")
         except OSError as exc:
