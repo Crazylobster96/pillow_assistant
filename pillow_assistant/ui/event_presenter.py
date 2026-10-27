@@ -148,6 +148,7 @@ class EventPresenter:
         if self.bus is not None and self.coordinator.multi_windows:
             anchor = QPoint(available.x() + (available.width() - 560) // 2, bar_y)
             self.coordinator.open_quick_input(anchor, close_displays=False)
+            self.coordinator.park_quick_for_displays()
 
     def open_surface_window(self, surface) -> None:
         self.coordinator.close_window("surface")

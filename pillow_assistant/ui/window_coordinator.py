@@ -72,6 +72,24 @@ class WindowCoordinator:
 
     def remove_multi_window(self, window) -> None:
         self.multi_windows = [item for item in self.multi_windows if item is not window]
+        if not self.multi_windows:
+            self.restore_quick_position()
+
+    def park_quick_for_displays(self) -> None:
+        """The dialog was moved under the display tiles; put it back when they close."""
+        self._quick_parked = True
+
+    def restore_quick_position(self) -> None:
+        """Displays closed: the dialog returns next to the button, where it opens normally."""
+        if not getattr(self, "_quick_parked", False):
+            return
+        self._quick_parked = False
+        bar = self.quick
+        try:
+            if bar is not None and bar.isVisible():
+                bar.move(self.anchor_point())
+        except RuntimeError:
+            pass
 
     def close_multi_windows(self) -> None:
         windows = list(self.multi_windows)
@@ -81,6 +99,8 @@ class WindowCoordinator:
                 window.close()
             except RuntimeError:
                 pass
+        if windows:
+            self.restore_quick_position()
 
     def followers(self) -> list:
         # Preserve the original follow set. The conversation-memory browser is
