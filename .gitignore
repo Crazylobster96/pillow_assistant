@@ -80,3 +80,4 @@ config.local.*
 *.gif
 *.mp3
 *.wav
+!pillow_assistant/ui/assets/*.png
