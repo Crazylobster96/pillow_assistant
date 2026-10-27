@@ -92,3 +92,25 @@ def test_an_excel_request_starts_with_the_excel_skill_loaded(monkeypatch, tmp_pa
     agent = ToolLoopAgent({"provider": "openai", "model": "m"}, None, registry, ctx, max_steps=2)
     asyncio.run(agent.run(prompt="调整表格顺序", emit=emit, request_id="r", skill="excel"))
     assert seen[0][-1]["content"].startswith("【技能 excel】") and "excel_edit" in ctx.active_tools
+
+
+def test_an_empty_answer_is_not_the_end(monkeypatch, tmp_path):
+    from pillow_assistant.core.agent.loop import ToolLoopAgent
+    from pillow_assistant.core.tools.base import ToolContext
+    from pillow_assistant.core.tools.registry import ToolRegistry
+
+    replies = iter([llm.ToolTurn(content=""), llm.ToolTurn(content="做好了")])
+    seen = []
+
+    async def fake(**kwargs):
+        seen.append(kwargs["messages"][-1]["content"])
+        return next(replies)
+
+    monkeypatch.setattr(llm, "complete_with_tools", fake)
+
+    async def emit(event):
+        pass
+
+    agent = ToolLoopAgent({"provider": "openai", "model": "m"}, None, ToolRegistry(), ToolContext(workspace=str(tmp_path)))
+    assert asyncio.run(agent.run(prompt="整理表格", emit=emit, request_id="r")) == "做好了"
+    assert "没有完成" in seen[1] or "not finished" in seen[1]

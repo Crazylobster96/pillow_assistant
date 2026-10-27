@@ -41,6 +41,8 @@ def _thousands(value: int) -> str:
 QUIET_TOOLS = {"apply_skill", "request_project_memory"}
 # A tool call written as text that cannot be read: ask for a real call this many times.
 TEXT_CALL_NUDGES = 2
+# An empty answer is not a finished task: ask the model to carry on this many times.
+EMPTY_ANSWER_NUDGES = 2
 
 
 def _quiet_line(name: str, args: dict, ok: bool) -> str:
@@ -130,6 +132,7 @@ class ToolLoopAgent:
         self._vision = llm.supports_vision(provider, model, extra)
         self._image_messages: list[tuple[int, int, str]] = []  # (message index, step, paths)
         self._call_nudges = 0
+        self._empty_nudges = 0
         self.perf = {"model_s": 0.0, "tool_s": 0.0, "calls": 0, "input_tokens": 0, "output_tokens": 0}
         run_t0 = time.time()
         for step in range(1, self.max_steps + 1):
@@ -183,6 +186,14 @@ class ToolLoopAgent:
                     if audit is not None and hasattr(audit, "_write"):
                         audit._write({"kind": "text_tool_call_nudged", "step": step})
                     continue
+            if not turn.tool_calls and not (turn.content or "").strip() and self._empty_nudges < EMPTY_ANSWER_NUDGES:
+                # Nothing said and nothing done (often right after a failed step): not finished.
+                self._empty_nudges += 1
+                messages.append({"role": "user", "content": t("loop.empty_answer")})
+                audit = getattr(self.ctx, "audit", None)
+                if audit is not None and hasattr(audit, "_write"):
+                    audit._write({"kind": "empty_answer_nudged", "step": step})
+                continue
             if not turn.tool_calls:
                 final_text = turn.content or ""
                 if final_text:
