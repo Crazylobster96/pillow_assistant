@@ -17,17 +17,18 @@ PDF_EXT = {".pdf"}
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
 VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".mpg", ".mpeg"}
 MEDIA_EXT = AUDIO_EXT | VIDEO_EXT
+WEB_EXT = {".html", ".htm", ".svg"}  # shown live: scripts, animation, WebGL
 ARCHIVE_EXT = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".7z", ".rar"}
 TEXT_EXT = {
     ".txt", ".md", ".markdown", ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
     ".yaml", ".yml", ".toml", ".ini", ".cfg", ".html", ".css", ".xml", ".sh",
     ".bat", ".sql", ".java", ".c", ".cpp", ".h", ".go", ".rs", ".rb", ".php",
     ".lua", ".r", ".log",
-}
+} - WEB_EXT
 
 
 def classify(path: str | Path) -> str:
-    """Return a kind key: image|pdf|table|code|media|archive|folder|generic."""
+    """Return a kind key: image|pdf|table|web|code|media|archive|folder|generic."""
     p = Path(path)
     if p.is_dir():
         return "folder"
@@ -42,6 +43,8 @@ def classify(path: str | Path) -> str:
         return "ppt"
     if ext in TABLE_EXT:
         return "table"
+    if ext in WEB_EXT:
+        return "web"
     if ext in TEXT_EXT:
         return "code"
     if ext in VIDEO_EXT:
@@ -73,6 +76,7 @@ def resolve(paths: list[str]):
     from pillow_assistant.ui.panels.archive_panel import ArchivePanel
     from pillow_assistant.ui.panels.generic_panel import GenericPanel
     from pillow_assistant.ui.panels.video_panel import VideoPanel
+    from pillow_assistant.ui.panels.web_panel import WebPanel
 
     if len(paths) != 1:
         return GenericPanel  # multiple files -> a listing panel
@@ -84,6 +88,7 @@ def resolve(paths: list[str]):
         "ppt": PptPanel,
         "table": TablePanel,
         "code": TextPanel,
+        "web": WebPanel,
         "folder": ArchivePanel,
         "archive": ArchivePanel,
         "video": VideoPanel,
