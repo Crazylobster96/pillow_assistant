@@ -430,7 +430,7 @@ class ProjectMemoryOrchestratorTests(unittest.TestCase):
             original_complete = llm.complete
             original_tools = llm.complete_with_tools
 
-            async def fake_triage(prompt, index, *, cfg, api_key, current_id=None):
+            async def fake_triage(prompt, index, *, cfg, api_key, current_id=None, **_):
                 return TriageResult(action="new", confidence=1.0, rationale="test")
 
             async def fake_complete(**kwargs):

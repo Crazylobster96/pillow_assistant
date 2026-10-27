@@ -130,6 +130,22 @@ class Orchestrator:
         except OSError:
             pass
 
+    def _last_exchange(self, project_id, limit: int = 400) -> str:
+        """The current project's last request and answer, for triage to read a short
+        follow-up against."""
+        project = self.pm.store.get(project_id) if project_id else None
+        if project is None:
+            return ""
+        try:
+            turns = self.pm.store.load_history(project, getattr(self.pm.session, "session_id", None), max_turns=1)
+        except Exception:
+            return ""
+        lines = []
+        for turn in turns[-2:]:
+            text = " ".join(str(turn.get("content") or "").split())
+            lines.append(f'{turn.get("role")}: {text[:limit]}')
+        return "\n".join(lines)
+
     def _registry_for(self, project_root: Path | None = None):
         """Build a request-local registry and resolve layered Skills without cross-run leakage."""
         from pillow_assistant.capabilities.skill_registry import CapabilitySkillRegistry
@@ -213,7 +229,8 @@ class Orchestrator:
 
         index = self.pm.store.index()
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session is not None else None
-        tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id)
+        tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id,
+                          current_context=self._last_exchange(current_id))
 
         # A paused run only resumes on an explicit continuation request. Check
         # both the in-memory fast path and the persistent Level-1 transcript.
