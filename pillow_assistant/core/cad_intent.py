@@ -13,7 +13,8 @@ import re
 _CAD_PATTERNS = (
     # Chinese
     r"(?<!数据)(?<!数学)(?<!统计)(?<!业务)建模|三维模型|3\s*[dD]\s*模型|立体模型|零件|装配体|装配图|工程图|图纸|机械设计|钣金",
-    r"概念图|爆炸图|剖视图|剖面图|轴测图|等轴测",
+    r"概念图|爆炸图|剖视图|剖面图|轴测图|等轴测|[三六]视图|主视图|俯视图|侧视图|左视图|右视图",
+    r"(?:导出|出|生成|转成?)\s*(?:一?个|一份)?\s*(?:step|stp|stl|dxf|3mf|iges|igs|glb)(?![a-z])",
     r"数控|刀路|刀具路径|[gG]\s*代码|铣削|车削|3\s*[dD]\s*打印",
     # Names, formats and English terms (ASCII word boundaries)
     r"(?<![a-z])(?:cad|cam|cnc|cadgen|freecad|autocad|solidworks|fusion\s*360|openscad|cadquery|build123d)(?![a-z])",
