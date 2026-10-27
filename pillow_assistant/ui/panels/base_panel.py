@@ -3,7 +3,8 @@
 A FilePanel is a dark, semi-transparent window with a type-specific preview on
 top and a shared input area below (model picker + prompt + streamed answer).
 Dropped paths are added to the session as references, so a question asked here
-carries the file(s) to the Agent. Subclasses implement ``build_preview``.
+carries the file(s) to the Agent; files dropped on an open panel are added too.
+A stop button cancels the running question. Subclasses implement ``build_preview``.
 """
 
 from __future__ import annotations
@@ -103,12 +104,13 @@ class FilePanel(QFrame):
     RESIZE_MARGIN = 7  # px band at the window edges that triggers drag-resize
 
     def __init__(self, paths, storage, bus, session, anchor_global=None, parent=None,
-                 history=None, show_dialog=True) -> None:
+                 history=None, show_dialog=True, tracker=None) -> None:
         super().__init__(parent)
         self.paths = [str(Path(p)) for p in paths]
         self.storage = storage
         self.bus = bus
         self.session = session
+        self.tracker = tracker  # RunTracker: lets a reopened dialog follow this run
         self._active_id: Optional[str] = None
         self._resizing = Qt.Edge(0)
         self._move_offset = None  # left-drag on the frame background moves the window
@@ -132,6 +134,7 @@ class FilePanel(QFrame):
         glass_theme_changed.opacity_changed.connect(self._apply_glass_opacity)
         self.setMinimumSize(360, 280)
         self.setMouseTracking(True)
+        self.setAcceptDrops(show_dialog)
 
         self.models = self.storage.list_model_configs()
 
@@ -194,6 +197,16 @@ class FilePanel(QFrame):
         self.prompt_edit = QLineEdit(self)
         self.prompt_edit.setPlaceholderText(t("panel.ask_placeholder"))
         row.addWidget(self.prompt_edit, 1)
+        self.stop_btn = QPushButton(t("input.stop"), self)
+        self.stop_btn.setToolTip(t("input.stop_tip"))
+        self.stop_btn.setStyleSheet(
+            "QPushButton { color:#FFFFFF; background: rgba(215,70,85,225); border:none;"
+            " border-radius:9px; padding:4px 10px; }"
+            "QPushButton:hover { background: rgba(235,90,110,245); }"
+        )
+        self.stop_btn.clicked.connect(self._on_stop)
+        self.stop_btn.hide()
+        row.addWidget(self.stop_btn)
         bottom_box.addLayout(row)
         self.response_view = QPlainTextEdit(self)
         self.response_view.setReadOnly(True)
@@ -324,7 +337,7 @@ class FilePanel(QFrame):
         """Paths a question from this panel should target. Subclasses can
         narrow this (e.g. the folder panel scopes to a selected file)."""
         if self.session is not None:
-            return self.session.references
+            return self.session.request_references()
         return self.paths
 
     def _on_submit(self) -> None:
@@ -335,12 +348,21 @@ class FilePanel(QFrame):
         request = AppRequest(
             kind=RequestKind.TEXT, prompt=text,
             model_ref=self.model_combo.currentData(), references=refs,
+            meta={"new_references": self.session.take_new(refs)} if self.session else {},
         )
         self._active_id = request.id
         self.response_view.appendPlainText(f"> {text}\n")
         self.prompt_edit.clear()
         self.prompt_edit.setEnabled(False)
+        self.stop_btn.show()
+        if self.tracker is not None:
+            self.tracker.start(request.id, text)
         self.bus.submit(request)
+
+    def _on_stop(self) -> None:
+        if self._active_id is not None and self.bus is not None:
+            self.stop_btn.setEnabled(False)
+            self.bus.cancel(self._active_id)
 
     def _on_event(self, event: AgentEvent) -> None:
         if event.request_id != self._active_id:
@@ -352,11 +374,15 @@ class FilePanel(QFrame):
             self.response_view.appendPlainText(f"\n{t('common.error_prefix')} {event.text}")
             self._finish()
         elif event.type == EventType.DONE:
+            if (event.meta or {}).get("cancelled"):
+                self.response_view.appendPlainText(f"\n{t('input.stopped')}")
             self.response_view.appendPlainText("\n")
             self._finish()
 
     def _finish(self) -> None:
         self._active_id = None
+        self.stop_btn.hide()
+        self.stop_btn.setEnabled(True)
         self.prompt_edit.setEnabled(bool(self.models))
         self.prompt_edit.setFocus()
 
@@ -444,6 +470,24 @@ class FilePanel(QFrame):
         elif edges & Qt.BottomEdge:
             g.setHeight(max(minh, g.height() + d.y()))
         self.setGeometry(g)
+
+    # -- more files dropped on an open panel join the question ----------------
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasUrls() and any(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+        event.acceptProposedAction()
+        if self.session is not None:
+            for path in paths:
+                self.session.add_reference(path)
+        if paths:
+            names = "、".join(Path(p).name for p in paths)
+            self.response_view.appendPlainText(t("panel.added_refs", names=names))
+        self.prompt_edit.setFocus()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         if event.key() == Qt.Key_Escape:

@@ -41,6 +41,19 @@ def _is_resume_request(prompt: str) -> bool:
     return text.startswith(("继续上次", "继续刚才", "resume ", "continue "))
 
 
+def _focus_note(references) -> str:
+    """Close the background with what this turn is about.
+
+    Models weigh the most recent lines of a long context heavily. Without this
+    line the project's recorded next steps (from an older request) and the
+    previous turns read like the current task, and a new request was ignored.
+    """
+    note = t("core.focus_request")
+    if references:
+        note += "\n" + t("core.focus_attachments", paths="\n".join(f"- {p}" for p in references))
+    return note
+
+
 class Orchestrator:
     def __init__(self, storage: Any, vault: Any, project_manager: Any, max_steps: int = 50,
                  undo_manager: Any = None, ask_broker: Any = None) -> None:
@@ -201,6 +214,9 @@ class Orchestrator:
 
     async def __call__(self, request: AppRequest, emit: Emit) -> None:
         configs = self.storage.list_model_configs() if hasattr(self.storage, "list_model_configs") else []
+        typed = [p for p in references.paths_in_text(request.prompt) if p not in request.references]
+        if typed:
+            request.references = list(request.references) + typed
         context_text, ref_images = references.materialize(request.references)
         image_paths = ([request.image_path] if request.image_path else []) + ref_images
 
@@ -276,6 +292,14 @@ class Orchestrator:
 
         project = self.pm.apply(tr, request.prompt)
         session_id = getattr(self.pm.session, "session_id", None)
+        if project.id != current_id:
+            dropped = self._drop_earlier_references(request)
+            if dropped:
+                context_text, ref_images = references.materialize(request.references)
+                image_paths = ([request.image_path] if request.image_path else []) + ref_images
+                names = "、".join(Path(p).name for p in dropped)
+                await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN,
+                                      text=t("core.refs_left_behind", names=names) + "\n"))
         if tr.action == "continue" and project.id != current_id:
             note = t("core.project_switch", name=project.name)  # genuine switch
         else:
@@ -285,6 +309,9 @@ class Orchestrator:
 
         audit = AuditLog(project.root / "audit.jsonl")
         audit.run_start(request.prompt)
+        # Why the request landed here: the session's project before it, and the rule used.
+        audit._write({"kind": "triage", "from_project": current_id, "action": tr.action,
+                      "rationale": tr.rationale, "confidence": tr.confidence})
         # Load the project's recent history ACROSS sessions (session_id=None),
         # not just the current session. A switch / new session must never make
         # the Agent lose the project's accumulated context.
@@ -302,6 +329,8 @@ class Orchestrator:
                     ) + memory_ctx.rendered_context
             except Exception:
                 memory_ctx = None
+        if final_context and not _is_resume_request(request.prompt):
+            final_context += "\n\n" + _focus_note(request.references)
         agent = self._agent(cfg, api_key, project.workspace, emit, request.references, audit,
                             request_id=request.id, project_id=project.id, project_root=project.root)
         resume_key = (project.id, session_id)
@@ -360,6 +389,27 @@ class Orchestrator:
                     audit._write({"kind": "project_rag_index_failed", "error": str(exc)[:300]})
         audit.run_end(len(final_text))
 
+    def _drop_earlier_references(self, request) -> list[str]:
+        """A question that lands in another project leaves the old work's files behind.
+
+        Files attached for this question (``meta["new_references"]``, set by the
+        dialog) and paths typed in it stay; chips sent with earlier questions
+        are dropped from the request and from the session.
+        """
+        new = (request.meta or {}).get("new_references")
+        if new is None:
+            return []
+        keep = set(new) | set(references.paths_in_text(request.prompt))
+        keep |= set(getattr(self.pm.session, "displayed", None) or [])  # still on screen
+        dropped = [p for p in request.references if p not in keep]
+        if dropped:
+            request.references = [p for p in request.references if p not in dropped]
+            session = self.pm.session
+            for path in dropped:
+                if session is not None:
+                    session.remove_reference(path)
+        return dropped
+
     async def _run_chat(self, request, emit, cfg, api_key, context_text, image_paths) -> None:
         await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=t("core.chat_note") + "\n"))
         chat_dir = Path.home() / ".pillow" / "chat"
@@ -379,6 +429,8 @@ class Orchestrator:
                     final_context = (context_text + "\n\n" if context_text else "") + memory_ctx.rendered_context
             except Exception:
                 memory_ctx = None
+        if final_context:
+            final_context += "\n\n" + _focus_note(request.references)
         final_text = await agent.run(
             prompt=request.prompt, emit=emit, request_id=request.id,
             context=final_context, image_paths=image_paths or None,

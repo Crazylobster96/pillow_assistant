@@ -1,6 +1,6 @@
 {
   "prompts": [
-    {"id":"shared.main_agent","version":"1.0.0","role":"system","files":{"zh":"shared/main-agent.zh.md","en":"shared/main-agent.en.md"}},
+    {"id":"shared.main_agent","version":"1.3.0","role":"system","files":{"zh":"shared/main-agent.zh.md","en":"shared/main-agent.en.md"}},
     {"id":"routing.project_triage.system","version":"2.0.0","role":"system","files":{"zh":"routing/project-triage.zh.md","en":"routing/project-triage.en.md"}},
     {"id":"routing.project_triage.request","version":"2.0.0","role":"user","files":{"zh":"routing/project-triage-request.zh.md","en":"routing/project-triage-request.en.md"},"variables":["prompt"]},
     {"id":"conversation.topic_router.system","version":"1.0.0","role":"system","files":{"default":"conversation/topic-router-system.md"}},
@@ -11,7 +11,7 @@
     {"id":"conversation.memory_signals.request","version":"1.0.0","role":"user","files":{"default":"conversation/memory-signals-request.md"}},
     {"id":"project.state_extractor.system","version":"1.0.0","role":"system","files":{"default":"project/state-extractor-system.md"}},
     {"id":"project.state_extractor.request","version":"1.0.0","role":"user","files":{"default":"project/state-extractor-request.md"}},
-    {"id":"project.state_block.label","version":"1.0.0","role":"context","files":{"default":"project/state-block-label.md"}},
+    {"id":"project.state_block.label","version":"1.1.0","role":"context","files":{"default":"project/state-block-label.md"}},
     {"id":"project.evidence.warning","version":"1.0.0","role":"context","files":{"default":"project/evidence-warning.md"}},
     {"id":"project.retrieval.warning","version":"1.0.0","role":"tool","files":{"default":"project/retrieval-warning.md"}},
     {"id":"context.compressor.system","version":"1.0.0","role":"system","files":{"default":"context/compressor-system.md"}},

@@ -1,0 +1,6 @@
+# run_python's matplotlib defaults (MATPLOTLIBRC): headless, and Chinese labels
+# drawn with a CJK font instead of empty boxes.
+backend: Agg
+font.family: sans-serif
+font.sans-serif: Microsoft YaHei, SimHei, PingFang SC, Hiragino Sans GB, Noto Sans CJK SC, Source Han Sans SC, WenQuanYi Micro Hei, DejaVu Sans
+axes.unicode_minus: False

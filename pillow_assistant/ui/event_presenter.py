@@ -31,6 +31,17 @@ class EventPresenter:
             self.show_surface(event)
         elif event_type == EventType.ASK:
             self.show_ask(event)
+        elif event_type in (EventType.DONE, EventType.ERROR):
+            self.finish_run(event)
+
+    def finish_run(self, event) -> None:
+        """A run ended (or was stopped): drop its open question, flag it if nobody watches."""
+        request_id = getattr(event, "request_id", None)
+        dialog = self.coordinator.window("ask")
+        if dialog is not None and getattr(dialog, "request_id", None) == request_id:
+            self.coordinator.close_window("ask")
+        if not self.request_has_view(request_id):
+            self.flash_icon()
 
     def show_ask(self, event) -> None:
         if self.ask_broker is None:
@@ -45,6 +56,7 @@ class EventPresenter:
             self.ask_broker.resolve(request_id, result)
 
         dialog = AskDialog(meta, on_answer)
+        dialog.request_id = getattr(event, "request_id", None)
         self.coordinator.set_window("ask", dialog)
         dialog.destroyed.connect(lambda *_, item=dialog: self.coordinator.clear_window("ask", item))
         self.coordinator.place_near_icon(dialog)
@@ -88,6 +100,9 @@ class EventPresenter:
         if not views:
             return
         self.coordinator.close_multi_windows()
+        if self.session is not None:
+            # The files on screen go with the next question, without becoming chips.
+            self.session.set_displayed([view.get("path") for view in views if view.get("path")])
 
         anchor_geometry = self.coordinator.anchor.frameGeometry()
         screen = QGuiApplication.screenAt(anchor_geometry.center()) or QGuiApplication.primaryScreen()

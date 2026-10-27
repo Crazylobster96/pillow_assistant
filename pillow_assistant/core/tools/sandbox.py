@@ -113,6 +113,9 @@ class Sandbox:
             "PYTHONIOENCODING": "utf-8",
             "PYTHONUNBUFFERED": "1",
             "MPLBACKEND": "Agg",  # headless matplotlib
+            "MATPLOTLIBRC": str(Path(__file__).with_name("matplotlibrc")),  # CJK fonts for 中文 labels
+            # One font cache for every run: building it per workspace cost seconds per import.
+            "MPLCONFIGDIR": str(Path.home() / ".pillow" / "matplotlib"),
             "HOME": str(self.workspace),
             "TEMP": str(self.workspace),
             "TMP": str(self.workspace),
@@ -123,11 +126,15 @@ class Sandbox:
         timed_out = False
         try:
             proc = subprocess.run(
-                [sys.executable, "-I", str(runner)],
+                # -I ignores PYTHONIOENCODING; -X utf8 makes the child's stdout UTF-8 anyway.
+                [sys.executable, "-I", "-X", "utf8", str(runner)],
                 cwd=str(self.workspace),
                 env=env,
                 capture_output=True,
-                text=True,
+                # The child writes UTF-8; with the locale codec (GBK on Chinese
+                # Windows) on either side, a character GBK lacks failed the step.
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 preexec_fn=_limits(memory_mb, timeout),
             )

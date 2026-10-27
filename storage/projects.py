@@ -14,6 +14,10 @@ Layout per project::
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import stat
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -22,6 +26,17 @@ from typing import Optional
 
 HISTORY_MAX_TURNS = 12
 HISTORY_MAX_CHARS = 6000
+
+
+def _clear_readonly(func, path, _exc) -> None:
+    """rmtree hook: clear the read-only flag and retry.
+
+    Windows refuses to delete a read-only file, and files copied from OneDrive or
+    a download folder often carry that flag into a workspace; rmtree then
+    stopped half-way and the project could not be deleted.
+    """
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 @dataclass
@@ -129,7 +144,10 @@ class ProjectStore:
         if not root.is_dir() or self._meta_path(root).exists() is False:
             return False
         try:
-            shutil.rmtree(root)
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(root, onexc=_clear_readonly)
+            else:
+                shutil.rmtree(root, onerror=_clear_readonly)
             return True
         except OSError:
             return False

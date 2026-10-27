@@ -17,6 +17,7 @@ from pillow_assistant.ui.gesture_controller import (
     GestureController,
     GestureState,
 )
+from pillow_assistant.ui.run_tracker import RunTracker
 from pillow_assistant.ui.icon_assets import (
     create_close_icon,
     create_keyboard_icon,
@@ -77,6 +78,8 @@ class FloatingAssistant(QWidget):
         self.setAcceptDrops(True)
         self._build_ui()
 
+        # Outlives every dialog: a reopened one picks up a run still in progress.
+        self.tracker = RunTracker(bus, parent=self)
         self.windows = WindowCoordinator(
             self,
             storage,
@@ -84,6 +87,7 @@ class FloatingAssistant(QWidget):
             session=session,
             vault=vault,
             project_store=project_store,
+            tracker=self.tracker,
         )
         self.presenter = EventPresenter(
             self.windows,
