@@ -18,6 +18,7 @@ def build_default_registry() -> ToolRegistry:
         SetMaxStepsTool,
         SetSurfaceTransparencyTool,
     )
+    from pillow_assistant.core.tools.builtin.excel_tool import ExcelEditTool, ExcelInspectTool
     from pillow_assistant.core.tools.builtin.file_tool import FileListTool, FileReadTool, FileWriteTool
     from pillow_assistant.core.tools.builtin.http_tool import HttpRequestTool
     from pillow_assistant.core.tools.builtin.present_tool import PresentTool
@@ -36,6 +37,8 @@ def build_default_registry() -> ToolRegistry:
     register(FileReadTool())
     register(FileWriteTool())
     register(FileListTool())
+    register(ExcelInspectTool())
+    register(ExcelEditTool())
     register(HttpRequestTool())
     register(RunCliTool())
     register(BrowserReadTool())
