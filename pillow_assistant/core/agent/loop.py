@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable, Optional
 from pillow_assistant.contracts import AgentEvent, EventType, SurfaceLevel, SurfaceSpec
 from pillow_assistant.core.context_budget import join_context_and_prompt
 from pillow_assistant.core import llm
+from pillow_assistant.core.agent import text_tool_calls
 from pillow_assistant.core.semantic_context import resolve_compression_profile
 from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_METADATA
 from pillow_assistant.core.i18n import t
@@ -38,6 +39,8 @@ def _thousands(value: int) -> str:
 # Tools whose result is instructions or reference text for the model, not news
 # for the user: the dialog shows one line instead of the first 800 characters.
 QUIET_TOOLS = {"apply_skill", "request_project_memory"}
+# A tool call written as text that cannot be read: ask for a real call this many times.
+TEXT_CALL_NUDGES = 2
 
 
 def _quiet_line(name: str, args: dict, ok: bool) -> str:
@@ -123,6 +126,7 @@ class ToolLoopAgent:
         self._reactivate_skill_tools(messages)
         self._vision = llm.supports_vision(provider, model, extra)
         self._image_messages: list[tuple[int, int, str]] = []  # (message index, step, paths)
+        self._call_nudges = 0
         self.perf = {"model_s": 0.0, "tool_s": 0.0, "calls": 0, "input_tokens": 0, "output_tokens": 0}
         run_t0 = time.time()
         for step in range(1, self.max_steps + 1):
@@ -152,6 +156,23 @@ class ToolLoopAgent:
                 # compacted view is only what was sent to the model and must
                 # not overwrite tool results or source text needed later.
                 self.last_managed_messages = list(turn.managed_messages)
+            if not turn.tool_calls and turn.content and text_tool_calls.looks_like_call(turn.content):
+                # The model wrote its tool call as text. Run it if it can be read;
+                # otherwise ask once or twice for a real call instead of ending here.
+                recovered = text_tool_calls.recover(turn.content, offered())
+                audit = getattr(self.ctx, "audit", None)
+                if recovered is not None:
+                    turn.content, turn.tool_calls = recovered
+                    if audit is not None and hasattr(audit, "_write"):
+                        audit._write({"kind": "text_tool_call_recovered", "step": step,
+                                      "tools": [c.name for c in turn.tool_calls]})
+                elif self._call_nudges < TEXT_CALL_NUDGES:
+                    self._call_nudges += 1
+                    messages.append({"role": "assistant", "content": turn.content})
+                    messages.append({"role": "user", "content": t("loop.text_tool_call")})
+                    if audit is not None and hasattr(audit, "_write"):
+                        audit._write({"kind": "text_tool_call_nudged", "step": step})
+                    continue
             if not turn.tool_calls:
                 final_text = turn.content or ""
                 if final_text:
