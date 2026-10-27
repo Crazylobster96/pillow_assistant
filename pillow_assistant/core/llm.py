@@ -54,9 +54,30 @@ def parse_extra(extra: Optional[str]) -> dict[str, Any]:
         return {}
 
 
+# Model names that take images. Others can opt in with {"vision": true} in the model's extra.
+_VISION_HINTS = ("vl", "vision", "omni", "gpt-4o", "gpt-4.1", "gpt-5", "claude", "gemini",
+                 "qwen3.5", "qwen3.6", "qwen3.7", "qwen3.8", "glm-4.5v", "kimi-k2.5")
+
+
+def supports_vision(provider: str, model: str, extra: Optional[dict[str, Any]] = None) -> bool:
+    """Whether tool-made images (renders, screenshots) can be sent to this model."""
+    if isinstance(extra, dict) and isinstance(extra.get("vision"), bool):
+        return extra["vision"]
+    name = (model or "").lower()
+    if any(hint in name for hint in _VISION_HINTS):
+        return True
+    try:
+        import litellm
+
+        return bool(litellm.supports_vision(model=resolve_model_string(provider, model)))
+    except Exception:
+        return False
+
+
 def _split_context_config(extra: Optional[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Remove Pillow-only context settings before calling LiteLLM."""
     completion_extra = dict(extra or {})
+    completion_extra.pop("vision", None)
     raw = completion_extra.pop("pillow_context", {})
     return completion_extra, dict(raw) if isinstance(raw, dict) else {}
 

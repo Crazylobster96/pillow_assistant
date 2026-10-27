@@ -7,6 +7,7 @@ any tool calls back through the registry, so adding a tool needs no change here.
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any, Awaitable, Callable, Optional
 
@@ -18,6 +19,22 @@ from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_MET
 from pillow_assistant.core.i18n import t
 
 Emit = Callable[[AgentEvent], Awaitable[None]]
+
+# Images a tool hands back (file_read on a render) are shown to vision models in a
+# user message after the tool results, at most a few per step, and dropped again
+# after a couple of model calls: each one costs about a thousand tokens per call.
+IMAGES_PER_STEP = 4
+IMAGE_MAX_BYTES = 5 * 1024 * 1024
+IMAGE_KEEP_STEPS = 2
+
+
+def _seconds(value: float) -> str:
+    value = int(round(value))
+    return f"{value // 60}:{value % 60:02d}" if value >= 60 else f"{value}s"
+
+
+def _thousands(value: int) -> str:
+    return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
 
 
 class ToolLoopAgent:
@@ -63,6 +80,13 @@ class ToolLoopAgent:
             self.cfg,
         )
 
+        skill_only = set(getattr(self.registry, "skill_only", None) or ())
+
+        def offered() -> list:
+            active = getattr(self.ctx, "active_tools", None) or set()
+            return [s for s in tools
+                    if s.get("function", {}).get("name") not in skill_only - active]
+
         user_text = join_context_and_prompt(context, prompt)
         if resume_messages:
             # Continue an interrupted run (hit the step limit last time): keep
@@ -88,13 +112,33 @@ class ToolLoopAgent:
         self.tool_evidence: list[dict[str, Any]] = []
         self._step = 0
         self.last_managed_messages: Optional[list[dict[str, Any]]] = None
+        self._reactivate_skill_tools(messages)
+        self._vision = llm.supports_vision(provider, model, extra)
+        self._image_messages: list[tuple[int, int, str]] = []  # (message index, step, paths)
+        self.perf = {"model_s": 0.0, "tool_s": 0.0, "calls": 0, "input_tokens": 0, "output_tokens": 0}
+        run_t0 = time.time()
         for step in range(1, self.max_steps + 1):
             self._step = step
-            turn = await llm.complete_with_tools(
-                provider=provider, model=model, messages=messages, tools=tools,
-                api_key=self.api_key, api_base=api_base, extra=extra,
-                semantic_profile=semantic_profile,
-            )
+            self._drop_images(messages, step=step)
+            t0 = time.time()
+            try:
+                turn = await llm.complete_with_tools(
+                    provider=provider, model=model, messages=messages, tools=offered(),
+                    api_key=self.api_key, api_base=api_base, extra=extra,
+                    semantic_profile=semantic_profile,
+                )
+            except Exception:
+                if not self._image_messages:
+                    raise
+                # The endpoint refused the images: carry on without them for this run.
+                self._vision = False
+                self._drop_images(messages, everything=True)
+                turn = await llm.complete_with_tools(
+                    provider=provider, model=model, messages=messages, tools=offered(),
+                    api_key=self.api_key, api_base=api_base, extra=extra,
+                    semantic_profile=semantic_profile,
+                )
+            self._record_call(step, time.time() - t0, getattr(turn, "usage", None) or {})
             if getattr(turn, "managed_messages", None) is not None:
                 # Keep the raw transcript as the session source of truth.  The
                 # compacted view is only what was sent to the model and must
@@ -121,19 +165,37 @@ class ToolLoopAgent:
                     for tc in turn.tool_calls
                 ],
             })
+            images: list[str] = []
             for tc in turn.tool_calls:
                 result_text = await self._run_tool(tc, emit, request_id)
+                if self._last_images and not self._vision:
+                    result_text += "\n" + t("loop.image_unseen")
+                images.extend(self._last_images)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_text})
+
+            if images and self._vision:
+                self._attach_images(messages, images, step)
 
         # Expose the run's end state so the orchestrator can offer "继续":
         # on limit it stores the transcript and resumes from it next request.
         self.reached_limit = reached_limit
+        self._drop_images(messages, everything=True)  # no base64 renders in the saved transcript
         self.final_messages = list(messages)
 
         if reached_limit:
             note = t("core.max_steps")
             final_text += note
             await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=note))
+
+        self.perf["total_s"] = time.time() - run_t0
+        if audit is not None and hasattr(audit, "_write"):
+            audit._write({"kind": "run_perf", **{k: round(v, 1) if isinstance(v, float) else v
+                                                 for k, v in self.perf.items()}})
+        if self.perf["calls"] > 1:
+            await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=t(
+                "loop.perf", total=_seconds(self.perf["total_s"]), model=_seconds(self.perf["model_s"]),
+                tools=_seconds(self.perf["tool_s"]), calls=self.perf["calls"],
+                tokens_in=_thousands(self.perf["input_tokens"]), tokens_out=_thousands(self.perf["output_tokens"]))))
 
         from pillow_assistant.core.surface_router import route
         level = route(final_text, self._artifacts)
@@ -145,6 +207,65 @@ class ToolLoopAgent:
         ))
         await emit(AgentEvent(request_id=request_id, type=EventType.DONE))
         return final_text
+
+    def _record_call(self, step: int, seconds: float, usage: dict) -> None:
+        tokens_in = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+        tokens_out = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+        self.perf["model_s"] += seconds
+        self.perf["calls"] += 1
+        self.perf["input_tokens"] += tokens_in
+        self.perf["output_tokens"] += tokens_out
+        audit = getattr(self.ctx, "audit", None)
+        if audit is not None and hasattr(audit, "_write"):
+            audit._write({"kind": "llm_call", "step": step, "ms": int(seconds * 1000),
+                          "input_tokens": tokens_in, "output_tokens": tokens_out})
+
+    def _reactivate_skill_tools(self, messages: list) -> None:
+        """A resumed run ("继续") keeps the tools its skills already unlocked."""
+        active = getattr(self.ctx, "active_tools", None)
+        if not isinstance(active, set):
+            return
+        skill_tool = getattr(self.registry, "_tools", {}).get("apply_skill")
+        skills = getattr(skill_tool, "_skills", None) or {}
+        for message in messages:
+            for call in message.get("tool_calls") or []:
+                fn = call.get("function") or {}
+                active.add(fn.get("name") or "")
+                if fn.get("name") == "apply_skill":
+                    try:
+                        skill = skills.get(json.loads(fn.get("arguments") or "{}").get("name"))
+                    except ValueError:
+                        skill = None
+                    if skill is not None:
+                        from pillow_assistant.core.tools.builtin.skill_tool import skill_tools
+                        active.update(skill_tools(skill))
+
+    def _attach_images(self, messages: list, paths: list[str], step: int) -> None:
+        content: list[dict[str, Any]] = []
+        shown = []
+        for path in paths:
+            try:
+                if len(shown) >= IMAGES_PER_STEP or os.path.getsize(path) > IMAGE_MAX_BYTES:
+                    continue
+                content.append({"type": "image_url", "image_url": {"url": llm.encode_image_data_url(path)}})
+            except OSError:
+                continue
+            shown.append(path)
+        if not shown:
+            return
+        names = ", ".join(os.path.basename(p) for p in shown)
+        messages.append({"role": "user", "content": [{"type": "text", "text": t("loop.tool_images", names=names)},
+                                                     *content]})
+        self._image_messages.append((len(messages) - 1, step, names))
+
+    def _drop_images(self, messages: list, step: int = 0, everything: bool = False) -> None:
+        keep = []
+        for index, shown_at, names in self._image_messages:
+            if (everything or step - shown_at > IMAGE_KEEP_STEPS) and index < len(messages):
+                messages[index] = {"role": "user", "content": t("loop.image_dropped", names=names)}
+            else:
+                keep.append((index, shown_at, names))
+        self._image_messages = keep
 
     async def _run_tool(self, tc, emit: Emit, request_id: str) -> str:
         try:
@@ -162,6 +283,9 @@ class ToolLoopAgent:
                               text=t("loop.step", k=step, n=self.max_steps, name=tc.name)))
         t0 = time.time()
         result = await self.registry.dispatch(tc.name, args, self.ctx)
+        self._last_images = list(getattr(result, "images", None) or [])
+        if hasattr(self, "perf"):
+            self.perf["tool_s"] += time.time() - t0
         summary = result.text
         self.tool_evidence.append({
             "tool_call_id": getattr(tc, "id", None),
