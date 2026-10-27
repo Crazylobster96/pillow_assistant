@@ -217,6 +217,8 @@ _ZH = {
                     "返回 returncode 与 stdout/stderr 以及新增的产物文件名。",
     "tool.py.code": "要执行的完整、可独立运行的 Python 源代码",
     "tool.sandbox_timeout": "\n[sandbox] 执行超过 {n}s 被终止。",
+    "tool.sandbox_timeout_hint": "\n如果代码本来就要跑这么久（大模型计算、批量处理），用 timeout 参数给更长的时间再运行一次，最多 {cap} 秒；如果是卡住或死循环，先改代码。",
+    "tool.sandbox_timeout_cap": "\n已经到了允许的最长时间。把工作拆成几段分别运行，或减少计算量。",
     # -- tools: file -------------------------------------------------------------------
     "tool.fr.desc": "读取文本文件内容。可读：当前项目工作目录内的文件，或本次会话已引用的文件/目录内文件。",
     "tool.fr.path": "文件路径（工作目录内可用相对路径）",
@@ -585,6 +587,8 @@ _EN = {
                     "Returns returncode, stdout/stderr and any new artifact filenames.",
     "tool.py.code": "complete, self-contained Python source to run",
     "tool.sandbox_timeout": "\n[sandbox] killed after exceeding {n}s.",
+    "tool.sandbox_timeout_hint": "\nIf the code really needs this long (heavy computation, batch work), run it again with a longer timeout, up to {cap} s; if it hung or looped, fix the code first.",
+    "tool.sandbox_timeout_cap": "\nThat is already the longest run allowed. Split the work into parts or do less per run.",
     "tool.fr.desc": "Read a text file: files inside the project workspace, or files under this session's references.",
     "tool.fr.path": "file path (relative allowed inside the workspace)",
     "tool.fr.denied": "Not allowed to read this path: {path}",

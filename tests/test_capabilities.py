@@ -59,7 +59,7 @@ def test_tool_manifests_bind_metadata_and_filter_modes():
     assert PythonTool.description
     assert PythonTool.parameters["required"] == ["code"]
     snapshot = registry.snapshot("project")
-    assert all(item["version"] == "1.0.0" for item in snapshot)
+    assert all(item["version"].count(".") == 2 for item in snapshot)  # manifest versions, not "dynamic"
     assert all("manifest.json" in item["source"] for item in snapshot)
 
 
