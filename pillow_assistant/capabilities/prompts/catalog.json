@@ -22,6 +22,6 @@
     {"id":"context.capsule.system","version":"1.0.0","role":"system","files":{"default":"context/capsule-system.md"},"variables":["status","payload"]},
     {"id":"context.supporting_moved","version":"1.0.0","role":"context","files":{"default":"context/supporting-moved.md"}},
     {"id":"asr.whisper_initial","version":"1.0.0","role":"asr","files":{"zh":"asr/whisper-initial.zh.md"}},
-    {"id":"skill.apply.description","version":"1.0.0","role":"tool","files":{"zh":"skill/apply-description.zh.md","en":"skill/apply-description.en.md"},"variables":["listing"]}
+    {"id":"skill.apply.description","version":"1.1.0","role":"tool","files":{"zh":"skill/apply-description.zh.md","en":"skill/apply-description.en.md"},"variables":["listing"]}
   ]
 }

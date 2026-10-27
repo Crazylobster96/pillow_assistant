@@ -1,0 +1,79 @@
+{
+  "name": "excel_edit",
+  "version": "1.0.0",
+  "description": {
+    "zh": "一次完成 Excel 修改并保留格式（openpyxl）：按段重排、查找替换、统一字体、重新编号。默认另存为原文件旁边的「<原名>_修改.xlsx」，原表不动；overwrite=true 时先备份为「<原名>_备份.xlsx」再覆盖。保存后自动核对行数（只移动时还核对内容未变），返回每步改了什么。用户要求的改动都写进同一次调用；文件被 Excel 打开时会提示先关闭。",
+    "en": "Make Excel changes in one call with formatting kept (openpyxl): reorder blocks, replace, one font, renumber. Saves '<name>_修改.xlsx' beside the source by default and leaves the source alone; overwrite=true first copies the source to '<name>_备份.xlsx'. Checks the saved file (row count; for pure moves, that content is unchanged) and reports each step. Put all requested changes in one call; a file open in Excel is reported so the user can close it."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "工作簿路径：附件的绝对路径，或工作目录内的相对路径"
+        },
+        "sheet": {
+          "type": "string",
+          "description": "工作表名，默认第一个"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "按顺序执行的操作列表，每项一个 op：\n- reorder_blocks：{op, column, order:[值…], within?, match?:\"contains\"|\"exact\"} 把 column 中相同值组成的连续段按 order 排列，整行连格式移动；order 可写简称（「瑶海」匹配「瑶海支公司」）；未列出的段保持在后面原顺序\n- replace：{op, find, replace, columns?:[列…], whole_cell?:bool} 查找替换文字\n- set_font：{op, name?, size?, include_header?:bool} 统一字体/字号，粗体颜色等保留\n- renumber：{op, column:\"序号\", start?:1, skip_if_blank?:列} 从数据第一行起重新连续编号"
+        },
+        "output": {
+          "type": "string",
+          "description": "输出文件名或路径（相对名放在原文件旁边），默认 <原名>_修改.xlsx"
+        },
+        "overwrite": {
+          "type": "boolean",
+          "description": "直接覆盖原文件（先自动备份）；仅在用户明确要求时使用"
+        }
+      },
+      "required": [
+        "path",
+        "operations"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "workbook path: an attachment's absolute path or a workspace-relative path"
+        },
+        "sheet": {
+          "type": "string",
+          "description": "sheet name, default the first"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "operations applied in order, one op each:\n- reorder_blocks: {op, column, order:[values], within?, match?:\"contains\"|\"exact\"} put the contiguous blocks of equal values in column into this order, moving whole rows with their formats; short names match (\"North\" matches \"North branch\"); unlisted blocks stay after them in their order\n- replace: {op, find, replace, columns?:[...], whole_cell?:bool} find and replace text\n- set_font: {op, name?, size?, include_header?:bool} one font / size; bold and colour stay\n- renumber: {op, column, start?:1, skip_if_blank?:column} number the data rows again"
+        },
+        "output": {
+          "type": "string",
+          "description": "output name or path (a bare name goes beside the source), default <name>_修改.xlsx"
+        },
+        "overwrite": {
+          "type": "boolean",
+          "description": "write over the source (backed up first); only when the user asks"
+        }
+      },
+      "required": [
+        "path",
+        "operations"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

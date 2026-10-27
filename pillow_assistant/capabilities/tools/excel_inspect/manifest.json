@@ -1,0 +1,79 @@
+{
+  "name": "excel_inspect",
+  "version": "1.0.0",
+  "description": {
+    "zh": "查看 Excel 工作簿结构（不修改）：工作表、表头所在行、列名、数据行范围、前几行样例、合并单元格、数据验证、条件格式、常用字体；给 group_by 时列出该列相同值组成的连续段及行号。处理 .xlsx 前先用它，一次就够，不要再写代码逐项检查。",
+    "en": "Read an Excel workbook's structure without changing it: sheets, header row, columns, data rows, a few sample rows, merged cells, validations, conditional formats, common fonts; with group_by, the contiguous blocks of equal values in that column with their rows. Use it once before working on an .xlsx instead of writing code to probe the sheet."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "工作簿路径：附件的绝对路径，或工作目录内的相对路径"
+        },
+        "sheet": {
+          "type": "string",
+          "description": "工作表名，默认第一个"
+        },
+        "group_by": {
+          "type": "string",
+          "description": "按哪一列分段：列名、列字母或序号，如 \"县支机构\""
+        },
+        "within": {
+          "type": "object",
+          "description": "只看/只改某一段：该列等于该值的连续行，如 {\"column\": \"中支机构\", \"value\": \"合肥中支\"}",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "workbook path: an attachment's absolute path or a workspace-relative path"
+        },
+        "sheet": {
+          "type": "string",
+          "description": "sheet name, default the first"
+        },
+        "group_by": {
+          "type": "string",
+          "description": "column to split into blocks: header name, letter or number"
+        },
+        "within": {
+          "type": "object",
+          "description": "limit to one stretch: the contiguous rows where column equals value, e.g. {\"column\": \"Region\", \"value\": \"North\"}",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  "permission": "readonly",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}
