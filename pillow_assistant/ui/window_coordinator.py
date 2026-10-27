@@ -75,6 +75,14 @@ class WindowCoordinator:
 
     def remove_multi_window(self, window) -> None:
         self.multi_windows = [item for item in self.multi_windows if item is not window]
+        shown = getattr(window, "shown_path", None)
+        if shown and self.session is not None:
+            self.session.remove_displayed(shown)
+            if self.quick is not None:
+                try:
+                    self.quick._refresh_chips()
+                except RuntimeError:
+                    pass
         if not self.multi_windows:
             self.restore_quick_position()
 
@@ -259,7 +267,7 @@ class WindowCoordinator:
             self.bus,
             self.session,
             anchor_global=anchor_global or self.anchor_point(),
-            open_reference=lambda path: self.open_file_panel([path]),
+            open_reference=lambda path: self.open_file_panel([path], as_reference=False),
             history=self.recent_history(),
             tracker=self.tracker,
         )
@@ -391,7 +399,7 @@ class WindowCoordinator:
         if app is not None:
             app.quit()
 
-    def open_file_panel(self, paths: list[str]) -> None:
+    def open_file_panel(self, paths: list[str], as_reference: bool = True) -> None:
         from pillow_assistant.ui.viewer_registry import resolve
 
         self.close_window("quick")
@@ -405,6 +413,7 @@ class WindowCoordinator:
             anchor_global=self.anchor_point(),
             history=self.recent_history(),
             tracker=self.tracker,
+            as_reference=as_reference,
         )
         self.set_window("panel", panel)
         panel.destroyed.connect(lambda *_, item=panel: self.clear_window("panel", item))

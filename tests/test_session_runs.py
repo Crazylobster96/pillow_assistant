@@ -323,3 +323,118 @@ def test_sandbox_output_with_characters_outside_the_locale_codec(tmp_path):
     result = Sandbox(tmp_path).run_python('print("存量协保员总表_备份.xlsx ✅ 😀 é")')
     assert result.returncode == 0, result.stderr
     assert "存量协保员总表_备份.xlsx ✅ 😀 é" in result.stdout
+
+
+def test_triage_sees_the_project_of_a_session_without_attachments(tmp_path):
+    import pillow_assistant.core.orchestrator as orch
+    from pillow_assistant.core import llm
+    from pillow_assistant.core.project_manager import ProjectManager
+    from storage.projects import ProjectStore
+
+    store = ProjectStore(tmp_path / "projects")
+    plate = store.create("步进电机安装板")
+    store.create("桌面手机支架")  # updated more recently
+    session = Session()  # no chips: len(session) == 0
+    session.project_id, session.session_id = plate.id, store.new_session_id()
+
+    async def fake_cwt(**kwargs):
+        return llm.ToolTurn(content="ok", tool_calls=[])
+
+    class FakeStorage:
+        def get_model_config(self, ref):
+            return {"display_name": "m", "provider": "OpenAI", "model": "x", "base_url": None, "extra": None}
+
+    seen = {}
+
+    async def classifier(**kwargs):
+        seen["user"] = kwargs["messages"][-1]["content"]
+        return '{"action":"continue","project_id":"%s","confidence":0.9}' % plate.id
+
+    orig = llm.complete_with_tools, llm.complete
+    llm.complete_with_tools, llm.complete = fake_cwt, classifier
+    try:
+        async def emit(_ev):
+            pass
+
+        asyncio.run(orch.Orchestrator(FakeStorage(), None, ProjectManager(store, session))(
+            AppRequest(prompt="展示一下三视图", model_ref="m"), emit))
+    finally:
+        llm.complete_with_tools, llm.complete = orig
+    assert f"当前项目：id={plate.id}" in seen["user"]
+    assert session.project_id == plate.id
+    import json
+    rows = [json.loads(line) for line in (plate.root / "audit.jsonl").read_text("utf-8").splitlines()]
+    assert {"kind": "triage", "from_project": plate.id, "action": "continue"}.items() <= \
+        next(r for r in rows if r["kind"] == "triage").items()
+
+
+def test_dialog_returns_next_to_the_button_when_the_displays_close():
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QWidget
+
+    from pillow_assistant.ui.window_coordinator import WindowCoordinator
+
+    app = QApplication.instance() or QApplication([])
+    anchor = QWidget()
+    anchor.setGeometry(100, 100, 48, 48)
+    anchor.show()
+    coordinator = WindowCoordinator(anchor, None)
+    bar = QWidget()
+    bar.show()
+    coordinator.set_window("quick", bar)
+    tiles = [QWidget(), QWidget()]
+    for tile in tiles:
+        tile.show()
+        coordinator.add_multi_window(tile)
+    bar.move(QPoint(700, 900))  # parked under the tiles
+    coordinator.park_quick_for_displays()
+
+    coordinator.remove_multi_window(tiles[0])
+    assert bar.pos() == QPoint(700, 900)  # one display still open
+    coordinator.remove_multi_window(tiles[1])
+    assert bar.pos() == coordinator.anchor_point()
+
+    bar.move(QPoint(700, 900))  # not parked: closing displays leaves it alone
+    coordinator.add_multi_window(tiles[0])
+    coordinator.close_multi_windows()
+    assert bar.pos() == QPoint(700, 900)
+    for widget in (bar, anchor):
+        widget.close()
+    app.processEvents()
+
+
+def test_closing_one_preview_tile_takes_its_file_off_the_question():
+    from PySide6.QtWidgets import QWidget
+
+    from pillow_assistant.ui.window_coordinator import WindowCoordinator
+
+    app = QApplication.instance() or QApplication([])
+    session = Session()
+    session.set_displayed(["C:/w/review.png", "C:/w/front.png"])
+    coordinator = WindowCoordinator(QWidget(), None, session=session)
+    tile = QWidget()
+    tile.shown_path = "C:/w/review.png"
+    coordinator.add_multi_window(tile)
+    coordinator.remove_multi_window(tile)
+    assert [p.replace("\\", "/") for p in session.displayed] == ["C:/w/front.png"]
+    app.processEvents()
+
+
+def test_a_recording_ends_when_the_button_is_no_longer_held(monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QPushButton, QWidget
+
+    from pillow_assistant.ui.gesture_controller import GestureController, GestureState
+
+    app = QApplication.instance() or QApplication([])
+    anchor = QWidget()
+    gestures = GestureController(QPushButton(anchor), anchor)
+    ended = []
+    gestures.recording_finished.connect(lambda: ended.append(True))
+    gestures.state = GestureState.PRESSED
+    gestures._begin_recording()
+    monkeypatch.setattr(QGuiApplication, "mouseButtons", staticmethod(lambda: Qt.NoButton))
+    gestures._check_still_held()  # the release never arrived
+    assert ended == [True] and gestures.state == GestureState.IDLE
+    app.processEvents()
