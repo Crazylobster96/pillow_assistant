@@ -85,6 +85,9 @@ class PillowAssistantApplication:
 
 
 def main() -> int:
+    from pillow_assistant.core.no_console import install
+
+    install()  # console programs it starts run without flashing a window
     app = PillowAssistantApplication()
     return app.run()
 
