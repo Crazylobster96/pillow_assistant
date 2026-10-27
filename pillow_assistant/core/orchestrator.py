@@ -212,7 +212,7 @@ class Orchestrator:
             await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=hint + "\n"))
 
         index = self.pm.store.index()
-        current_id = getattr(self.pm.session, "project_id", None) if self.pm.session else None
+        current_id = getattr(self.pm.session, "project_id", None) if self.pm.session is not None else None
         tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id)
 
         # A paused run only resumes on an explicit continuation request. Check
