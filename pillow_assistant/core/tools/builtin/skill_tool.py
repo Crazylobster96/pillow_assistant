@@ -20,7 +20,9 @@ class SkillTool:
     def __init__(self, skills, available_tools=None) -> None:
         get_tool_manifest_registry().bind(self)
         self._skills = {s.name: s for s in skills}
-        available = set(available_tools or [])
+        # This tool itself is registered after the list is taken; skills such as cam
+        # apply others (dfm, dxf), so it must count as available.
+        available = set(available_tools or []) | {self.name}
         self._missing_tools = {
             s.name: sorted(set(getattr(s, "resolved_tools", None) or s.tools) - available)
             for s in skills

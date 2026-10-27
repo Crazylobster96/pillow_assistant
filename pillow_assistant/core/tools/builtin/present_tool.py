@@ -20,6 +20,25 @@ from pillow_assistant.core.tools.base import Permission, ToolContext, ToolResult
 MAX_WINDOWS = 4
 
 
+
+def locate(raw: str, workspace) -> Path:
+    """A path the model gave: workspace-relative paths resolve in the workspace, and
+    an absolute path that does not exist (the model guessed the folder) falls back to
+    the same trailing parts inside the workspace ("…/tmp/render/top.png")."""
+    p = Path(raw).expanduser()
+    if p.exists() or not workspace:
+        return p
+    ws = Path(workspace)
+    relative = not p.anchor  # "/Users/…" has an anchor but is not absolute on Windows
+    if relative and (ws / p).exists():
+        return ws / p
+    parts = p.parts[1:] if p.anchor else p.parts
+    for k in range(len(parts)):
+        candidate = ws.joinpath(*parts[k:])
+        if candidate.exists():
+            return candidate
+    return ws / p if relative else p
+
 @manifest_tool
 class PresentTool:
     name = "present_windows"
@@ -48,10 +67,10 @@ class PresentTool:
             if not path and text:
                 path_candidate = str(text).strip().strip('"')
                 if (len(path_candidate) < 500 and "\n" not in path_candidate
-                        and Path(path_candidate).exists()):  # file OR folder
+                        and locate(path_candidate, getattr(ctx, "workspace", None)).exists()):  # file OR folder
                     path, text = path_candidate, None
             if path:
-                p = Path(str(path))
+                p = locate(str(path), getattr(ctx, "workspace", None))
                 if not p.exists():
                     skipped.append(t("tool.pw.missing", path=path))
                     continue
