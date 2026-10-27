@@ -71,13 +71,15 @@ def prejudge(prompt: str, index: list[dict], current: Optional[dict]) -> dict:
     why = []
     named = next((p for p in index if p.get("name") and str(p["name"]) in text), None)
     if named is not None and current is not None and named["id"] != current["id"]:
-        return {"guess": f"延续「{named['name']}」", "why": why + ["提到了这个项目的名字"]}
+        return {"guess": f"延续「{named['name']}」", "why": why + ["提到了这个项目的名字"],
+                "action": "continue", "project_id": str(named["id"])}
     if _NEW_RE.match(text):
-        return {"guess": "新建项目", "why": why + ["以「做/设计/新建一个」开头"]}
+        return {"guess": "新建项目", "why": why + ["以「做/设计/新建一个」开头"], "action": "new"}
     if _QUESTION_RE.search(text) and len(text) <= 30 and not _REFERS_RE.search(text):
-        return {"guess": "闲聊（一问一答）", "why": why + ["是个简短的问题，没有指代当前工作"]}
+        return {"guess": "闲聊（一问一答）", "why": why + ["是个简短的问题，没有指代当前工作"], "action": "chat"}
     if current is not None and (len(text) <= 20 or _REFERS_RE.search(text)):
-        return {"guess": f"延续当前项目「{current['name']}」", "why": why + ["没有说出新对象，或用了「这块/再/展示/导出」等指代"]}
+        return {"guess": f"延续当前项目「{current['name']}」", "why": why + ["没有说出新对象，或用了「这块/再/展示/导出」等指代"],
+                "action": "continue", "project_id": str(current["id"])}
     return {"guess": "不确定", "why": why}
 
 
@@ -160,10 +162,18 @@ async def triage(prompt: str, index: list[dict], *, cfg: dict, api_key: Optional
             extra=llm.parse_extra(cfg.get("extra")),
         )
     except Exception:
-        if current is not None:  # no classifier: stay with the work at hand
-            return TriageResult(action="continue", project_id=str(current["id"]), confidence=0.5,
-                                rationale="triage-failed")
-        return TriageResult(action="chat", confidence=0.0, rationale="triage-failed")
+        # No classifier: the keyword first pass decides; with no guess, stay with the work at hand.
+        action = guess.get("action")
+        if action == "continue" and guess.get("project_id"):
+            return TriageResult(action="continue", project_id=guess["project_id"], confidence=0.5,
+                                rationale="triage-failed", prejudge=first_pass)
+        if action == "new":
+            return TriageResult(action="new", name=derive_name(prompt), confidence=0.5, rationale="triage-failed",
+                                prejudge=first_pass)
+        if action == "chat" or current is None:
+            return TriageResult(action="chat", confidence=0.0, rationale="triage-failed", prejudge=first_pass)
+        return TriageResult(action="continue", project_id=str(current["id"]), confidence=0.5,
+                            rationale="triage-failed", prejudge=first_pass)
 
     valid_ids = {str(p["id"]) for p in index}
     result = parse_triage(text, valid_ids)

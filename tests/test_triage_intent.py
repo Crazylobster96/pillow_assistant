@@ -44,3 +44,15 @@ def test_a_keyword_first_pass_goes_to_the_model_which_may_override_it(monkeypatc
     monkeypatch.setattr(llm, "complete", classifier)
     result = asyncio.run(triage_mod.triage("再加一列", INDEX, cfg={}, api_key=None, current_id="p1"))
     assert "关键词初判：延续当前项目「协保员表」" in seen["user"] and result.prejudge_ok is False
+
+
+def test_without_the_model_the_keyword_first_pass_decides(monkeypatch):
+    async def broken(**kwargs):
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr(llm, "complete", broken)
+    run = lambda text: asyncio.run(triage_mod.triage(text, INDEX, cfg={}, api_key=None, current_id="p1"))  # noqa: E731
+    assert run("周报再补一段").project_id == "p2"
+    assert run("做一个新的排班表").action == "new"
+    assert run("Excel 怎么冻结首行？").action == "chat"
+    assert run("再加一列").project_id == "p1"
