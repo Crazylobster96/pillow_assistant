@@ -40,5 +40,10 @@ class Session:
     def clear(self) -> None:
         self._references.clear()
 
+    def __bool__(self) -> bool:
+        # A session is there even with no chips. Without this, __len__ made an empty
+        # one falsy, and `x if session else None` checks lost its project binding.
+        return True
+
     def __len__(self) -> int:
         return len(self._references)
