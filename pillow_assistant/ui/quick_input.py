@@ -369,6 +369,8 @@ class QuickInputBar(QFrame):
             meta = event.meta or {}
             if event.type == EventType.START:
                 self._set_tool_status(t("tool.status.processing"))
+            elif event.type == EventType.TOOL_START and meta.get("status"):
+                self._set_tool_status(meta["status"])  # the model is still writing
             elif event.type == EventType.TOOL_START:
                 self._had_tool = True
                 self._set_tool_status(t(
