@@ -147,3 +147,29 @@ if __name__ == "__main__":
         t()
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)
+
+
+def test_sandbox_matplotlib_draws_chinese_labels(tmp_path):
+    import importlib.util
+
+    import pytest
+
+    if importlib.util.find_spec("matplotlib") is None:
+        pytest.skip("matplotlib not installed")
+    from pillow_assistant.core.tools.sandbox import Sandbox
+
+    result = Sandbox(tmp_path).run_python(
+        "import warnings, matplotlib.pyplot as plt\n"
+        "with warnings.catch_warnings(record=True) as w:\n"
+        "    warnings.simplefilter('always'); plt.title('三视图'); plt.savefig('v.png')\n"
+        "print('glyph warnings', sum('Glyph' in str(x.message) for x in w))\n", timeout=120)
+    assert "glyph warnings 0" in result.stdout, result.stdout + result.stderr
+
+
+def test_web_pages_and_svg_open_in_the_live_web_panel():
+    from pillow_assistant.ui.viewer_registry import classify, resolve
+
+    for name in ("figure.html", "page.HTM", "anim.svg"):
+        assert classify(name) == "web", name
+    assert classify("script.js") == "code"
+    assert resolve(["laser-kerf.html"]).__name__ == "WebPanel"
