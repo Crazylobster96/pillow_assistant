@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from typing import Any, Awaitable, Callable, Optional
 
@@ -43,6 +44,9 @@ QUIET_TOOLS = {"apply_skill", "request_project_memory"}
 TEXT_CALL_NUDGES = 2
 # An empty answer is not a finished task: ask the model to carry on this many times.
 EMPTY_ANSWER_NUDGES = 2
+# Questions an answer ends with that are put up as a dialog, per run; yes/no ones get two buttons.
+TEXT_QUESTIONS = 2
+YES_NO = re.compile(r"(吗|么|是否|要不要|需不需要|能不能|可不可以|好不好)[？?]$|^(shall|should|do|would|can|want) ", re.IGNORECASE)
 
 
 def _quiet_line(name: str, args: dict, ok: bool) -> str:
@@ -50,7 +54,16 @@ def _quiet_line(name: str, args: dict, ok: bool) -> str:
     return t("loop.quiet_result" if ok else "loop.quiet_failed", name=name, detail=str(detail)[:80])
 
 
+def trailing_question(text: str) -> str:
+    """The question an answer ends with ("" when its last line is not a question)."""
+    lines = [line.strip().strip("*_#>- ").strip() for line in (text or "").splitlines() if line.strip()]
+    last = lines[-1] if lines else ""
+    return last if last.endswith(("?", "？")) and len(last) <= 300 else ""
+
+
 class ToolLoopAgent:
+    _text_questions = 0
+
     def __init__(self, cfg: dict, api_key: Optional[str], registry, ctx, max_steps: int = 6) -> None:
         self.cfg = cfg
         self.api_key = api_key
@@ -132,6 +145,7 @@ class ToolLoopAgent:
         self._vision = llm.supports_vision(provider, model, extra)
         self._image_messages: list[tuple[int, int, str]] = []  # (message index, step, paths)
         self._call_nudges = 0
+        self._text_questions = 0
         self._empty_nudges = 0
         self.perf = {"model_s": 0.0, "tool_s": 0.0, "calls": 0, "input_tokens": 0, "output_tokens": 0}
         run_t0 = time.time()
@@ -202,6 +216,13 @@ class ToolLoopAgent:
                         await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN,
                                               text=t("core.answer_sep")))
                     await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=final_text))
+                answer = await self._ask_text_question(final_text)
+                if answer:
+                    # The model asked the user in plain text: the question went up as a dialog,
+                    # and the run carries on with the answer.
+                    messages.append({"role": "assistant", "content": final_text})
+                    messages.append({"role": "user", "content": t("loop.text_question_answered", answer=answer)})
+                    continue
                 reached_limit = False
                 break
             used_tools = True
@@ -257,6 +278,27 @@ class ToolLoopAgent:
         ))
         await emit(AgentEvent(request_id=request_id, type=EventType.DONE))
         return final_text
+
+    async def _ask_text_question(self, text: str) -> str:
+        """When an answer ends by asking the user something, put that question up as a dialog;
+        the user's answer ("" when there is no dialog, it was dismissed, or asked twice already)."""
+        ask = getattr(self.ctx, "ask", None)
+        question = trailing_question(text)
+        if ask is None or not question or self._text_questions >= TEXT_QUESTIONS:
+            return ""
+        self._text_questions += 1
+        yes_no = bool(YES_NO.search(question))
+        try:
+            result = await ask({"question": question, "allow_text": True, "multi": False,
+                                "options": [t("loop.text_question_yes"), t("loop.text_question_no")] if yes_no else []})
+        except Exception:  # noqa: BLE001 - no dialog: the answer stands as written
+            return ""
+        audit = getattr(self.ctx, "audit", None)
+        if audit is not None and hasattr(audit, "_write"):
+            audit._write({"kind": "text_question", "question": question[:200], "answered": bool(result.get("answer"))})
+        if result.get("cancelled") or result.get("timeout"):
+            return ""
+        return str(result.get("answer") or "").strip()
 
     def _record_call(self, step: int, seconds: float, usage: dict) -> None:
         tokens_in = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
