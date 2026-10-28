@@ -7,6 +7,7 @@ import asyncio
 import base64
 import json
 import mimetypes
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
@@ -391,6 +392,11 @@ class ToolTurn:
     usage: dict[str, Any] = field(default_factory=dict)
     context_stats: dict[str, Any] = field(default_factory=dict)
     managed_messages: Optional[list[dict[str, Any]]] = None
+    stream_stats: dict[str, Any] = field(default_factory=dict)  # first chunk, longest silence, chunks
+
+
+class ModelStalled(TimeoutError):
+    """The model sent nothing new for STREAM_IDLE_S, or one turn ran past TURN_MAX_S."""
 
 
 async def complete_with_tools(
@@ -461,7 +467,7 @@ async def complete_with_tools(
         kwargs["messages"] = managed.messages
         response = await _streamed_tool_turn(litellm, kwargs, on_progress)
 
-    content, calls, usage = response
+    content, calls, usage, stats = response
     manager.observe(managed, _actual_input_tokens(usage))
     return ToolTurn(
         content=content,
@@ -469,33 +475,58 @@ async def complete_with_tools(
         usage=usage,
         context_stats=managed.diagnostics(),
         managed_messages=managed.messages,
+        stream_stats=stats,
     )
 
 
-STREAM_IDLE_S = 300  # no new chunk for this long: the request is given up
+STREAM_IDLE_S = 300  # nothing new (text, thinking or tool arguments) for this long: given up
+TURN_MAX_S = 1500  # one model turn may not take longer than this, however it trickles
 
 
 async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
-    """(content, tool calls, usage) from a streamed completion."""
+    """(content, tool calls, usage, stream stats) from a streamed completion.
+
+    The limits are enforced here, not left to the provider's client: a run once waited 49
+    minutes on one call although the client was given STREAM_IDLE_S. Keep-alive chunks that
+    carry nothing do not count as progress."""
     kwargs = {**kwargs, "stream": True, "stream_options": {"include_usage": True}, "timeout": STREAM_IDLE_S}
-    stream = await litellm.acompletion(**kwargs)
+    t0 = time.monotonic()
+    try:
+        stream = await asyncio.wait_for(litellm.acompletion(**kwargs), timeout=STREAM_IDLE_S)
+    except asyncio.TimeoutError:
+        raise ModelStalled(f"no response within {STREAM_IDLE_S}s") from None
+    stats: dict[str, Any] = {"first_chunk_ms": None, "chunks": 0, "longest_silence_ms": 0}
     if not hasattr(stream, "__aiter__"):  # a whole response after all (some endpoints, test doubles)
         message = stream.choices[0].message
         calls = [ToolCall(id=tc.id, name=tc.function.name, arguments=tc.function.arguments or "{}")
                  for tc in (getattr(message, "tool_calls", None) or [])]
-        return getattr(message, "content", None), calls, _usage_dict(getattr(stream, "usage", None))
+        stats["first_chunk_ms"] = int((time.monotonic() - t0) * 1000)
+        return getattr(message, "content", None), calls, _usage_dict(getattr(stream, "usage", None)), stats
     text: list[str] = []
     calls: dict[int, dict] = {}
     usage: dict = {}
     received = 0
     thinking = 0  # reasoning models (qwen3, deepseek-r1) stream their thinking first
     last_report = 0
+    last_progress = time.monotonic()
     iterator = stream.__aiter__()
     while True:
+        now = time.monotonic()
+        if now - t0 > TURN_MAX_S:
+            raise ModelStalled(f"one model turn ran past {TURN_MAX_S}s")
+        if now - last_progress > STREAM_IDLE_S:
+            raise ModelStalled(f"nothing new from the model for {STREAM_IDLE_S}s")
+        wait = min(STREAM_IDLE_S - (now - last_progress), TURN_MAX_S - (now - t0))
         try:
-            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=STREAM_IDLE_S)
+            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=max(0.05, wait))
         except StopAsyncIteration:
             break
+        except asyncio.TimeoutError:
+            raise ModelStalled(f"nothing new from the model for {STREAM_IDLE_S}s") from None
+        stats["chunks"] += 1
+        if stats["first_chunk_ms"] is None:
+            stats["first_chunk_ms"] = int((time.monotonic() - t0) * 1000)
+        before = received + thinking
         if getattr(chunk, "usage", None):
             usage = _usage_dict(chunk.usage) or usage
         for choice in getattr(chunk, "choices", None) or []:
@@ -520,6 +551,10 @@ async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
                     if getattr(fn, "arguments", None):
                         slot["args"].append(fn.arguments)
                         received += len(fn.arguments)
+        if received + thinking > before:
+            moment = time.monotonic()
+            stats["longest_silence_ms"] = max(stats["longest_silence_ms"], int((moment - last_progress) * 1000))
+            last_progress = moment
         if on_progress is not None and received + thinking - last_report >= 400:
             last_report = received + thinking
             try:
@@ -529,7 +564,7 @@ async def _streamed_tool_turn(litellm, kwargs: dict, on_progress=None) -> tuple:
     tool_calls = [ToolCall(id=slot["id"] or f"call_{index}", name=slot["name"],
                            arguments="".join(slot["args"]) or "{}")
                   for index, slot in sorted(calls.items()) if slot["name"]]
-    return ("".join(text) or None), tool_calls, usage
+    return ("".join(text) or None), tool_calls, usage, stats
 
 
 async def complete(
