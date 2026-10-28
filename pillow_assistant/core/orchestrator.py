@@ -29,6 +29,8 @@ CORE_TOOLS = {"run_python", "file_read", "file_write", "file_list", "ask_user", 
 # is confident enough; below this it keeps chatting (no switch). 0.8 balances
 # responsiveness against mis-switches (LLM confidence clusters at 0.7/0.8/0.9).
 SWITCH_CONFIDENCE = 0.8
+# A reply this short to the question the last answer ended with stays in that project.
+ANSWER_MAX_CHARS = 20
 # Switching *away* from a project you're actively working in is riskier (it can
 # orphan the thread), so it needs a higher bar than attaching from one-off chat.
 SWITCH_AWAY_CONFIDENCE = 0.9
@@ -167,8 +169,25 @@ class Orchestrator:
         lines = []
         for turn in turns[-2:]:
             text = " ".join(str(turn.get("content") or "").split())
-            lines.append(f'{turn.get("role")}: {text[:limit]}')
+            if len(text) > limit:
+                # Keep the end too: an answer often closes with the question the user replies to.
+                text = text[:limit // 3] + " … " + text[-(limit - limit // 3):]
+            lines.append(f'{turn.get("role")}: {text}')
         return "\n".join(lines)
+
+    def _pending_question(self, project_id) -> str:
+        """The question the current project's last answer ended with ("" when it did not)."""
+        from pillow_assistant.core.agent.loop import trailing_question
+
+        project = self.pm.store.get(project_id) if project_id else None
+        if project is None:
+            return ""
+        try:
+            turns = self.pm.store.load_history(project, getattr(self.pm.session, "session_id", None), max_turns=1)
+        except Exception:
+            return ""
+        last = turns[-1] if turns else {}
+        return trailing_question(str(last.get("content") or "")) if last.get("role") == "assistant" else ""
 
     def _registry_for(self, project_root: Path | None = None):
         """Build a request-local registry and resolve layered Skills without cross-run leakage."""
@@ -258,6 +277,13 @@ class Orchestrator:
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session is not None else None
         tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id,
                           current_context=self._last_exchange(current_id), skills=self._skill_menu())
+
+        # A short reply right after the project's answer ended with a question is the answer
+        # to it ("打开", "要", "不用"): it stays in the project, whatever triage made of it alone.
+        if current_id and tr.action != "continue" and tr.rationale != "app-setting" \
+                and len((request.prompt or "").strip()) <= ANSWER_MAX_CHARS and self._pending_question(current_id):
+            tr = TriageResult(action="continue", project_id=current_id, confidence=1.0,
+                              rationale="answer-to-question", skill=tr.skill)
 
         # A paused run only resumes on an explicit continuation request. Check
         # both the in-memory fast path and the persistent Level-1 transcript.
