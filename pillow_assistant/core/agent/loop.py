@@ -166,18 +166,29 @@ class ToolLoopAgent:
                     api_key=self.api_key, api_base=api_base, extra=extra,
                     semantic_profile=semantic_profile, on_progress=progress,
                 )
-            except Exception:
-                if not self._image_messages:
+            except Exception as exc:
+                stalled = isinstance(exc, llm.ModelStalled)
+                audit = getattr(self.ctx, "audit", None)
+                if audit is not None and hasattr(audit, "_write"):
+                    audit._write({"kind": "llm_failed", "step": step, "ms": int((time.time() - t0) * 1000),
+                                  "stalled": stalled, "images": bool(self._image_messages), "error": str(exc)[:300]})
+                if not self._image_messages and not stalled:
                     raise
-                # The endpoint refused the images: carry on without them for this run.
-                self._vision = False
-                self._drop_images(messages, everything=True)
+                if stalled:
+                    await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN,
+                                          text=t("loop.model_stalled", seconds=int(time.time() - t0))))
+                # The endpoint refused (or choked on) the images: carry on without them for this
+                # run; a stalled call is asked once more either way.
+                if self._image_messages:
+                    self._vision = False
+                    self._drop_images(messages, everything=True)
                 turn = await llm.complete_with_tools(
                     provider=provider, model=model, messages=messages, tools=offered(),
                     api_key=self.api_key, api_base=api_base, extra=extra,
                     semantic_profile=semantic_profile,
                 )
-            self._record_call(step, time.time() - t0, getattr(turn, "usage", None) or {})
+            self._record_call(step, time.time() - t0, getattr(turn, "usage", None) or {},
+                              getattr(turn, "stream_stats", None) or {})
             if getattr(turn, "managed_messages", None) is not None:
                 # Keep the raw transcript as the session source of truth.  The
                 # compacted view is only what was sent to the model and must
@@ -300,7 +311,7 @@ class ToolLoopAgent:
             return ""
         return str(result.get("answer") or "").strip()
 
-    def _record_call(self, step: int, seconds: float, usage: dict) -> None:
+    def _record_call(self, step: int, seconds: float, usage: dict, stream: Optional[dict] = None) -> None:
         tokens_in = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
         tokens_out = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
         self.perf["model_s"] += seconds
@@ -310,7 +321,7 @@ class ToolLoopAgent:
         audit = getattr(self.ctx, "audit", None)
         if audit is not None and hasattr(audit, "_write"):
             audit._write({"kind": "llm_call", "step": step, "ms": int(seconds * 1000),
-                          "input_tokens": tokens_in, "output_tokens": tokens_out})
+                          "input_tokens": tokens_in, "output_tokens": tokens_out, **(stream or {})})
 
     async def _preapply_skill(self, skill: str, messages: list, emit: Emit, request_id: str) -> None:
         """Start the run with the skill triage picked already applied: its instructions in the
