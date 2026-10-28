@@ -156,7 +156,7 @@ class Orchestrator:
         return [(skill.name, " ".join(str(skill.description or "").split()).split(". ")[0][:110])
                 for skill in skills]
 
-    def _last_exchange(self, project_id, limit: int = 400) -> str:
+    def _last_exchange(self, project_id, limit: int = 600) -> str:
         """The current project's last request and answer, for triage to read a short
         follow-up against."""
         project = self.pm.store.get(project_id) if project_id else None
@@ -170,8 +170,8 @@ class Orchestrator:
         for turn in turns[-2:]:
             text = " ".join(str(turn.get("content") or "").split())
             if len(text) > limit:
-                # Keep the end too: an answer often closes with the question the user replies to.
-                text = text[:limit // 3] + " … " + text[-(limit - limit // 3):]
+                # Keep the end: an answer closes with its result and the question the user replies to.
+                text = "… " + text[-limit:]
             lines.append(f'{turn.get("role")}: {text}')
         return "\n".join(lines)
 
