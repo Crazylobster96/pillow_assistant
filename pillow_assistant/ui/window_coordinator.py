@@ -206,6 +206,25 @@ class WindowCoordinator:
         y = min(max(available.top(), y), max(available.top(), available.bottom() - height))
         window.move(x, y)
 
+    def place_under_dialog(self, window) -> None:
+        """A management window (projects, memory) goes in the same column as the question
+        dialog: left edges aligned, just below it (or below the button when there is no
+        dialog). Without room below, it goes beside the button, clear of the dialog."""
+        anchor_geometry = self.anchor.frameGeometry()
+        screen = QGuiApplication.screenAt(anchor_geometry.center()) or QGuiApplication.primaryScreen()
+        available = screen.availableGeometry()
+        bar = self.quick
+        try:
+            above = bar.frameGeometry() if bar is not None and bar.isVisible() else anchor_geometry
+        except RuntimeError:
+            above = anchor_geometry
+        x = min(max(above.left(), available.left()), max(available.left(), available.right() - window.width()))
+        y = above.bottom() + 8
+        if y + window.height() <= available.bottom():
+            window.move(x, y)
+            return
+        self.place_near_icon(window, fit=False)
+
     def capture_follow_offsets(self) -> None:
         offsets = []
         for window in self.followers():
@@ -386,7 +405,7 @@ class WindowCoordinator:
         )
         self.set_window("projects", window)
         window.destroyed.connect(lambda *_, item=window: self.clear_window("projects", item))
-        self.place_near_icon(window, fit=False)  # beside the button, clear of the question dialog
+        self.place_under_dialog(window)
         window.show()
         window.raise_()
         window.activateWindow()
@@ -422,7 +441,7 @@ class WindowCoordinator:
         window = ConversationMemoryPanel(self.storage.db_path)
         self.set_window("memory", window)
         window.destroyed.connect(lambda *_, item=window: self.clear_window("memory", item))
-        self.place_near_icon(window, fit=False)  # beside the button, clear of the question dialog
+        self.place_under_dialog(window)
         window.show()
         window.raise_()
         window.activateWindow()

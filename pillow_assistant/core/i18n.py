@@ -106,6 +106,7 @@ _ZH = {
     "multi.open_failed": "无法打开预览：{path}\n{err}",
     "multi.open_failed_title": "打开失败",
     # -- projects panel --------------------------------------------------------
+    "projects.close_tip": "关闭（Esc）",
     "projects.title": "项目",
     "projects.chat_entry": "💬 单次对话",
     "projects.empty": "还没有项目。提问后会自动创建。",
@@ -495,6 +496,7 @@ _EN = {
     "multi.content_title": "Content",
     "multi.open_failed": "Could not open preview: {path}\n{err}",
     "multi.open_failed_title": "Open failed",
+    "projects.close_tip": "Close (Esc)",
     "projects.title": "Projects",
     "projects.chat_entry": "💬 One-off chat",
     "projects.empty": "No projects yet. One is created automatically when you ask.",

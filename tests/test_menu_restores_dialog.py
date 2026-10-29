@@ -49,3 +49,12 @@ def test_a_dialog_the_user_moved_stays_put(app):
     bar.move(QPoint(50, 50))
     coordinator.restore_room_for_menu()
     assert bar.pos() == QPoint(50, 50)
+
+
+def test_projects_open_in_the_dialogs_column(app):
+    coordinator, bar, _ = _setup()
+    projects = QtWidgets.QWidget()
+    projects.resize(500, 300)
+    coordinator.place_under_dialog(projects)
+    assert projects.x() == bar.frameGeometry().left()
+    assert projects.y() == bar.frameGeometry().bottom() + 8
