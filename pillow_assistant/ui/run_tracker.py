@@ -10,6 +10,7 @@ the run is and keep following it.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -20,11 +21,21 @@ from pillow_assistant.contracts import AgentEvent, EventType
 KEEP_FINISHED = 5  # finished runs kept (newest first) besides the running ones
 
 
+def is_dialog_text(event: AgentEvent) -> bool:
+    """Whether a TOKEN belongs in the conversation (the answer, a notice for the user)
+    rather than in the task panel (steps, tool output, checks, timings)."""
+    meta = event.meta or {}
+    return bool(meta.get("answer") or meta.get("notice"))
+
+
 @dataclass
 class Run:
     request_id: str
     prompt: str
-    text: str = ""
+    text: str = ""  # what the dialog shows: the answer and notices
+    log: str = ""  # the task's process: steps, tool output, checks
+    is_task: bool = False  # a tool ran: it has a task page
+    started: float = 0.0
     last_event: Optional[AgentEvent] = None
     running: bool = True
     cancelled: bool = False
@@ -47,7 +58,7 @@ class RunTracker(QObject):
 
     def start(self, request_id: str, prompt: str) -> None:
         self._state.counter += 1
-        self._state.runs[request_id] = Run(request_id, prompt, order=self._state.counter)
+        self._state.runs[request_id] = Run(request_id, prompt, order=self._state.counter, started=time.time())
         self._prune()
 
     def get(self, request_id: Optional[str]) -> Optional[Run]:
@@ -62,7 +73,12 @@ class RunTracker(QObject):
         if run is None:
             return
         if event.type == EventType.TOKEN:
-            run.text += event.text or ""
+            if is_dialog_text(event):
+                run.text += event.text or ""
+            else:
+                run.log += event.text or ""
+        elif event.type == EventType.TOOL_START and not (event.meta or {}).get("status"):
+            run.is_task = True
         elif event.type in (EventType.DONE, EventType.ERROR):
             run.running = False
             run.cancelled = bool((event.meta or {}).get("cancelled"))

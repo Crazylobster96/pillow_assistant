@@ -14,7 +14,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from pillow_assistant.contracts import AgentEvent, EventType, SurfaceLevel, SurfaceSpec
 from pillow_assistant.core.context_budget import join_context_and_prompt
-from pillow_assistant.core import llm
+from pillow_assistant.core import llm, run_control
 from pillow_assistant.core.agent import text_tool_calls
 from pillow_assistant.core.semantic_context import resolve_compression_profile
 from pillow_assistant.core.agent.prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_METADATA
@@ -154,6 +154,7 @@ class ToolLoopAgent:
         for step in range(1, self.max_steps + 1):
             self._step = step
             self._drop_images(messages, step=step)
+            await run_control.checkpoint(request_id)  # held here while the user paused the task
             t0 = time.time()
 
             async def progress(chars: int, thinking: int = 0, _step=step, _t0=t0) -> None:
@@ -228,7 +229,9 @@ class ToolLoopAgent:
                         # Visually separate the answer from the tool-call noise.
                         await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN,
                                               text=t("core.answer_sep")))
-                    await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=final_text))
+                    # The answer itself: the dialog shows only this; the rest is the task's process.
+                    await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=final_text,
+                                          meta={"answer": True}))
                 answer = await self._ask_text_question(final_text)
                 if answer:
                     # The model asked the user in plain text: the question went up as a dialog,
@@ -269,7 +272,7 @@ class ToolLoopAgent:
         if reached_limit:
             note = t("core.max_steps")
             final_text += note
-            await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=note))
+            await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=note, meta={"notice": True}))
 
         self.perf["total_s"] = time.time() - run_t0
         if audit is not None and hasattr(audit, "_write"):
@@ -414,7 +417,8 @@ class ToolLoopAgent:
                 # instead of leaving the model to guess at a cryptic load error.
                 self._sac_told = True
                 result.text += "\n" + t("sac.blocked_model")
-                await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=t("sac.blocked_user")))
+                await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=t("sac.blocked_user"),
+                                      meta={"notice": True}))
         if hasattr(self, "perf"):
             self.perf["tool_s"] += time.time() - t0
         summary = result.text

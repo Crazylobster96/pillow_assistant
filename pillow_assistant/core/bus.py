@@ -5,7 +5,8 @@ processed on a dedicated asyncio loop running in its own thread, so model calls
 never block the UI (NFR-1). Resulting ``AgentEvent`` objects are delivered back
 on the Qt main thread via a queued signal connection.
 
-:meth:`EventBus.cancel` stops a running request: its task is cancelled at the
+:meth:`EventBus.pause` / :meth:`EventBus.resume` hold a request before its next
+step (``core/run_control.py``). :meth:`EventBus.cancel` stops a running request: its task is cancelled at the
 next await (a model call, a tool, a question to the user) and the UI gets a
 DONE event with ``meta["cancelled"]``.
 """
@@ -50,6 +51,17 @@ class EventBus(QObject):
         """Stop a running request; safe to call from the Qt main thread."""
         self._loop.call_soon_threadsafe(self._cancel, request_id)
 
+    def pause(self, request_id: str) -> None:
+        """Hold a running request before its next step; safe from the Qt main thread."""
+        from pillow_assistant.core import run_control
+
+        self._loop.call_soon_threadsafe(run_control.pause, request_id)
+
+    def resume(self, request_id: str) -> None:
+        from pillow_assistant.core import run_control
+
+        self._loop.call_soon_threadsafe(run_control.resume, request_id)
+
     def _cancel(self, request_id: str) -> None:
         task = self._tasks.get(request_id)
         if task is not None and not task.done():
@@ -73,6 +85,9 @@ class EventBus(QObject):
             self.event.emit(AgentEvent(request_id=request.id, type=EventType.ERROR, text=str(exc)))
         finally:
             self._tasks.pop(request.id, None)
+            from pillow_assistant.core import run_control
+
+            run_control.forget(request.id)
 
     def shutdown(self) -> None:
         """Stop the background loop; safe to call from the Qt main thread."""

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, RequestKind
 from pillow_assistant.core.i18n import t
 from pillow_assistant.ui.prompt_edit import PromptEdit
+from pillow_assistant.ui.run_tracker import is_dialog_text
 from pillow_assistant.ui.acrylic import disable_acrylic, glass_opacity, glass_theme_changed
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
 
@@ -87,6 +88,10 @@ class QuickInputBar(QFrame):
         self.tracker = tracker  # RunTracker: transcripts of runs started from any dialog
         self._active_id: Optional[str] = None
         self._resizing = Qt.Edge(0)
+        self._task_panel = None  # the running request's process, once it uses a tool
+        self._pending_log = ""  # process text before the first tool (goes to the panel if one opens)
+        self._prompt = ""
+        self._answered = False
 
         self.setWindowFlags(
             Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
@@ -207,6 +212,9 @@ class QuickInputBar(QFrame):
         self.response_view.appendPlainText(t("input.resumed") + f"\n> {run.prompt}\n")
         self.response_view.moveCursor(QTextCursor.MoveOperation.End)
         self.response_view.insertPlainText(run.text)
+        self._prompt = run.prompt
+        if run.is_task:
+            self._open_task_panel(run.log, started=run.started).set_state("running")
         self._set_tool_status(t("tool.status.processing"))
         if run.last_event is not None:
             self._on_event(run.last_event)
@@ -235,6 +243,8 @@ class QuickInputBar(QFrame):
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._position_grip()
+        if getattr(self, "_task_panel", None) is not None:
+            self._task_panel.place_beside(self)
 
     def _apply_glass_opacity(self, opacity: int) -> None:
         self._glass_opacity = max(0, min(100, int(opacity)))
@@ -339,6 +349,10 @@ class QuickInputBar(QFrame):
         )
         self._active_id = request.id
         self._had_tool = False
+        self._prompt = text
+        self._pending_log = ""
+        self._answered = False
+        self._close_task_panel()  # phase 1: one task page, the newest request's
         self._set_tool_status(t("tool.status.processing"))
         self.response_view.show()
         self.response_view.appendPlainText(f"> {text}\n")
@@ -371,34 +385,43 @@ class QuickInputBar(QFrame):
             if event.type == EventType.START:
                 self._set_tool_status(t("tool.status.processing"))
             elif event.type == EventType.TOOL_START and meta.get("status"):
-                self._set_tool_status(meta["status"])  # the model is still writing
+                if self._task_panel is not None:
+                    self._task_panel.set_step(meta["status"])  # the model is still writing
+                else:
+                    self._set_tool_status(meta["status"])
             elif event.type == EventType.TOOL_START:
                 self._had_tool = True
-                self._set_tool_status(t(
-                    "tool.status.running",
-                    step=meta.get("step", 1), total=meta.get("total", "?"),
-                    name=meta.get("name") or event.text,
-                ))
+                panel = self._open_task_panel()
+                panel.set_step(t("tool.status.running", step=meta.get("step", 1), total=meta.get("total", "?"),
+                                 name=meta.get("name") or event.text))
+                self._set_tool_status(t("task.see_panel"))
             elif event.type == EventType.ASK:
                 self._set_tool_status(t(
                     "tool.status.waiting",
                     name=meta.get("tool_name") or t("tool.status.permission"),
                 ))
             elif event.type == EventType.TOOL_RESULT:
-                self._had_tool = True
-                result = (event.text or "").strip()
-                if len(result) > 500:
-                    result = result[:500] + "..."
-                key = "tool.status.ok" if meta.get("ok") else "tool.status.failed"
-                self._set_tool_status(t(key, name=meta.get("name") or "-", result=result))
+                self._had_tool = True  # its output arrives as process text (TOKEN) for the panel
             elif event.type == EventType.TOKEN:
-                self.response_view.moveCursor(QTextCursor.MoveOperation.End)
-                self.response_view.insertPlainText(event.text)
+                if is_dialog_text(event):
+                    self._answered = self._answered or bool(meta.get("answer"))
+                    self.response_view.moveCursor(QTextCursor.MoveOperation.End)
+                    self.response_view.insertPlainText(event.text)
+                elif self._task_panel is not None:
+                    self._task_panel.append(event.text)
+                else:
+                    self._pending_log += event.text or ""
             elif event.type == EventType.ERROR:
+                if self._task_panel is not None:
+                    self._task_panel.set_state("stopped")
                 self._set_tool_status(t("tool.status.error", result=event.text))
                 self.response_view.appendPlainText(f"\n{t('common.error_prefix')} {event.text}")
                 self._finish()
             elif event.type == EventType.DONE:
+                if self._task_panel is not None:
+                    self._task_panel.set_state("stopped" if meta.get("cancelled") else "done")
+                    if not self._answered and not meta.get("cancelled"):
+                        self.response_view.appendPlainText(t("task.ended_see_panel"))
                 if meta.get("cancelled"):
                     self._set_tool_status(t("tool.status.stopped"))
                     self.response_view.appendPlainText(f"\n{t('input.stopped')}")
@@ -408,6 +431,32 @@ class QuickInputBar(QFrame):
                 self._finish()
         except Exception:
             log.exception("QuickInputBar._on_event failed (event=%s)", event.type)
+    # -- task panel (phase 1: the newest request's process) -------------------
+    def _open_task_panel(self, log: str = "", started: Optional[float] = None):
+        if self._task_panel is None:
+            from pillow_assistant.ui.task_panel import TaskPanel
+
+            panel = TaskPanel(self._prompt[:60], bus=self.bus, request_id=self._active_id, started=started)
+            panel.append(log or self._pending_log)
+            self._pending_log = ""
+            panel.place_beside(self)
+            panel.show()
+            self._task_panel = panel
+        return self._task_panel
+
+    def _close_task_panel(self) -> None:
+        panel, self._task_panel = self._task_panel, None
+        if panel is not None:
+            try:
+                panel.close()
+            except RuntimeError:
+                pass
+
+    def moveEvent(self, event) -> None:  # noqa: N802
+        super().moveEvent(event)
+        if getattr(self, "_task_panel", None) is not None:
+            self._task_panel.place_beside(self)
+
     def _finish(self) -> None:
         self._active_id = None
         self.stop_btn.hide()
@@ -501,11 +550,15 @@ class QuickInputBar(QFrame):
 
     def focusOutEvent(self, event) -> None:  # noqa: N802
         # Keep open while a response is streaming; otherwise dismiss.
-        if self._active_id is None and not self.isActiveWindow():
+        from PySide6.QtWidgets import QApplication
+
+        on_panel = self._task_panel is not None and QApplication.activeWindow() is self._task_panel
+        if self._active_id is None and not self.isActiveWindow() and not on_panel:
             self.close()
         super().focusOutEvent(event)
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._close_task_panel()  # the run goes on; reopening the dialog brings its page back
         if self.bus is not None:
             try:
                 self.bus.event.disconnect(self._on_event)

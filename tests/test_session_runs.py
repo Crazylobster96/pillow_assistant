@@ -100,7 +100,7 @@ def test_cancel_stops_a_running_request_and_reports_it():
     tracker.start(request.id, request.prompt)
     bus.submit(request)
     assert started.wait(5)
-    _drain(app, lambda: tracker.get(request.id).text == "partial")
+    _drain(app, lambda: tracker.get(request.id).log == "partial")  # process text, not the answer
     assert tracker.latest_running().request_id == request.id  # a reopened dialog finds it
 
     bus.cancel(request.id)
@@ -108,7 +108,7 @@ def test_cancel_stops_a_running_request_and_reports_it():
     done = [e for e in seen if e.type == EventType.DONE]
     assert done and done[0].meta.get("cancelled")
     run = tracker.get(request.id)
-    assert not run.running and run.cancelled and run.text == "partial"
+    assert not run.running and run.cancelled and run.log == "partial" and run.text == ""
     assert tracker.latest_running() is None
     bus.shutdown()
 
@@ -147,15 +147,22 @@ def test_reopened_dialog_follows_the_running_task_and_can_stop_it():
     first.prompt_edit.setText("整理表格")
     first._on_submit()
     rid = bus.submitted[0].id
+    bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOOL_START, text="excel",
+                              meta={"name": "excel", "step": 1, "total": 200}))
+    assert first._task_panel is not None  # a tool ran: it is a task, its page opens
     bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOKEN, text="已读入 120 行"))
+    assert "已读入 120 行" in first._task_panel.log.toPlainText()
+    assert "已读入 120 行" not in first.response_view.toPlainText()  # the dialog keeps to the conversation
     first.close()  # the user closes the dialog; the run goes on
 
     second = QuickInputBar(_FakeStorage(), bus, session, tracker=tracker)
     assert second._active_id == rid
     assert "整理表格" in second.response_view.toPlainText()
-    assert "已读入 120 行" in second.response_view.toPlainText()
+    assert "已读入 120 行" in second._task_panel.log.toPlainText()  # the page comes back with it
     bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOKEN, text="，正在改字体"))
-    assert "正在改字体" in second.response_view.toPlainText()
+    assert "正在改字体" in second._task_panel.log.toPlainText()
+    bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOKEN, text="表格已整理好", meta={"answer": True}))
+    assert "表格已整理好" in second.response_view.toPlainText()
     assert not second.stop_btn.isHidden()
     second._on_stop()
     assert bus.cancelled == [rid]
