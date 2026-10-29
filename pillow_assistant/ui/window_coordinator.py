@@ -37,6 +37,35 @@ def when_closed(window, callback) -> None:
     _OnClose(window, callback)
 
 
+
+PLACE_GAP = 8
+
+
+def side_by_side(near: tuple, size: tuple, area: tuple) -> tuple:
+    """Where a window of ``size`` goes next to the ``near`` box (x, y, w, h) inside ``area``:
+    below (left edges aligned), right, left (top edges aligned), or above, whichever fits
+    first; if none fits whole, the one that shows the most of it, kept on screen."""
+    nx, ny, nw, nh = near
+    w, h = size
+    ax, ay, aw, ah = area
+    side_y = max(ay, min(ny, ay + ah - h))  # top-aligned, slid up only as far as the screen needs
+    candidates = [
+        (nx, ny + nh + PLACE_GAP),           # below
+        (nx + nw + PLACE_GAP, side_y),       # right
+        (nx - w - PLACE_GAP, side_y),        # left
+        (nx, ny - h - PLACE_GAP),            # above
+    ]
+
+    def visible(x, y):
+        return max(0, min(x + w, ax + aw) - max(x, ax)) * max(0, min(y + h, ay + ah) - max(y, ay))
+
+    for x, y in candidates:
+        if visible(x, y) == w * h:
+            return x, y
+    x, y = max(candidates, key=lambda c: visible(*c))
+    return (min(max(x, ax), max(ax, ax + aw - w)), min(max(y, ay), max(ay, ay + ah - h)))
+
+
 class WindowCoordinator:
     """Own transient window references and keep them anchored to one widget."""
 
@@ -204,6 +233,23 @@ class WindowCoordinator:
                 break
         x = min(max(available.left(), x), max(available.left(), available.right() - width))
         y = min(max(available.top(), y), max(available.top(), available.bottom() - height))
+        window.move(x, y)
+
+    def place_under_dialog(self, window) -> None:
+        """A management window (projects, memory) is placed against the question dialog (or
+        the button when there is none): below it with left edges aligned when it fits there,
+        else to its right or left with top edges aligned, else above it."""
+        anchor_geometry = self.anchor.frameGeometry()
+        screen = QGuiApplication.screenAt(anchor_geometry.center()) or QGuiApplication.primaryScreen()
+        available = screen.availableGeometry()
+        bar = self.quick
+        try:
+            near = bar.frameGeometry() if bar is not None and bar.isVisible() else anchor_geometry
+        except RuntimeError:
+            near = anchor_geometry
+        x, y = side_by_side(
+            (near.left(), near.top(), near.width(), near.height()), (window.width(), window.height()),
+            (available.left(), available.top(), available.width(), available.height()))
         window.move(x, y)
 
     def capture_follow_offsets(self) -> None:
@@ -386,7 +432,7 @@ class WindowCoordinator:
         )
         self.set_window("projects", window)
         window.destroyed.connect(lambda *_, item=window: self.clear_window("projects", item))
-        self.place_near_icon(window, fit=False)  # beside the button, clear of the question dialog
+        self.place_under_dialog(window)
         window.show()
         window.raise_()
         window.activateWindow()
@@ -422,7 +468,7 @@ class WindowCoordinator:
         window = ConversationMemoryPanel(self.storage.db_path)
         self.set_window("memory", window)
         window.destroyed.connect(lambda *_, item=window: self.clear_window("memory", item))
-        self.place_near_icon(window, fit=False)  # beside the button, clear of the question dialog
+        self.place_under_dialog(window)
         window.show()
         window.raise_()
         window.activateWindow()

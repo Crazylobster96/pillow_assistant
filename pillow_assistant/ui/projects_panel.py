@@ -103,7 +103,7 @@ QPushButton:hover {{ background: rgba(255,255,255,220); }}
 QPushButton#switchBtn {{ background: rgba(74,124,200,220); color:#FFFFFF; font-weight: bold; }}
 QPushButton#switchBtn:hover {{ background: rgba(94,148,224,235); }}
 QPushButton#switchBtn:disabled {{ background: rgba(70,80,95,20); color: #7B8591; }}
-QPushButton#closeBtn {{ background: rgba(255,255,255,125); border-radius:14px; font-size:16px; }}
+QPushButton#closeBtn {{ background: rgba(255,255,255,170); color:#25303D; border-radius:16px; padding:0; font-size:18px; font-weight:bold; }}
 QPushButton#closeBtn:hover {{ background: rgba(235,90,110,210); color:#FFFFFF; }}
 QPushButton#deleteBtn:hover {{ background: rgba(214,69,90,210); color:#FFFFFF; }}
 QPushButton#deleteBtn:disabled {{ background: rgba(70,80,95,15); color: #7B8591; }}
@@ -151,7 +151,8 @@ class ProjectsPanel(QWidget):
         header.addLayout(title_box, 1)
         close_btn = QPushButton("×", self)
         close_btn.setObjectName("closeBtn")
-        close_btn.setFixedSize(28, 28)
+        close_btn.setFixedSize(32, 32)
+        close_btn.setToolTip(t("projects.close_tip"))
         close_btn.clicked.connect(self.close)
         header.addWidget(close_btn, 0, Qt.AlignTop)
         outer.addLayout(header)
