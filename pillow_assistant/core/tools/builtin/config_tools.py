@@ -146,6 +146,23 @@ class SetMaxStepsTool:
 
 
 @manifest_tool
+class SetMaxTasksTool:
+    name = "set_max_tasks"
+    permission = Permission.SYSTEM
+
+    async def __call__(self, args: dict, ctx: ToolContext) -> ToolResult:
+        try:
+            n = int(args.get("tasks"))
+        except (TypeError, ValueError):
+            return ToolResult(ok=False, text=t("tool.tasks.bad", v=args.get("tasks")))
+        if not (1 <= n <= 20):
+            return ToolResult(ok=False, text=t("tool.tasks.bad", v=n))
+        from pillow_assistant.core.settings import set_setting
+        set_setting("max_tasks", n)
+        return ToolResult(ok=True, text=t("tool.tasks.done", n=n))
+
+
+@manifest_tool
 class SetSurfaceTransparencyTool:
     name = "set_surface_transparency"
     permission = Permission.SYSTEM

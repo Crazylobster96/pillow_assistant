@@ -151,16 +151,16 @@ def test_reopened_dialog_follows_the_running_task_and_can_stop_it():
                               meta={"name": "excel", "step": 1, "total": 200}))
     assert first._task_panel is not None  # a tool ran: it is a task, its page opens
     bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOKEN, text="已读入 120 行"))
-    assert "已读入 120 行" in first._task_panel.log.toPlainText()
+    assert "已读入 120 行" in first._task_panel.page(rid).log.toPlainText()
     assert "已读入 120 行" not in first.response_view.toPlainText()  # the dialog keeps to the conversation
     first.close()  # the user closes the dialog; the run goes on
 
     second = QuickInputBar(_FakeStorage(), bus, session, tracker=tracker)
     assert second._active_id == rid
     assert "整理表格" in second.response_view.toPlainText()
-    assert "已读入 120 行" in second._task_panel.log.toPlainText()  # the page comes back with it
+    assert "已读入 120 行" in second._task_panel.page(rid).log.toPlainText()  # the page comes back with it
     bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOKEN, text="，正在改字体"))
-    assert "正在改字体" in second._task_panel.log.toPlainText()
+    assert "正在改字体" in second._task_panel.page(rid).log.toPlainText()
     bus.event.emit(AgentEvent(request_id=rid, type=EventType.TOKEN, text="表格已整理好", meta={"answer": True}))
     assert "表格已整理好" in second.response_view.toPlainText()
     assert not second.stop_btn.isHidden()

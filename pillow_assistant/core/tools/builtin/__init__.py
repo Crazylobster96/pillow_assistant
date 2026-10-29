@@ -16,6 +16,7 @@ def build_default_registry() -> ToolRegistry:
         ListModelsTool,
         SetLanguageTool,
         SetMaxStepsTool,
+        SetMaxTasksTool,
         SetSurfaceTransparencyTool,
     )
     from pillow_assistant.core.tools.builtin.excel_tool import ExcelEditTool, ExcelInspectTool
@@ -48,6 +49,7 @@ def build_default_registry() -> ToolRegistry:
     register(AssignModelRoleTool())
     register(SetLanguageTool())
     register(SetMaxStepsTool())
+    register(SetMaxTasksTool())
     register(SetSurfaceTransparencyTool())
     register(AskUserTool())
     register(ProcessVideoTool())

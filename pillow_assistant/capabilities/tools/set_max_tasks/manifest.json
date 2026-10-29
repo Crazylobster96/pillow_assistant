@@ -1,0 +1,39 @@
+{
+  "name": "set_max_tasks",
+  "version": "1.0.0",
+  "description": {
+    "zh": "设置同时运行的任务个数上限并持久化（1-20，默认 3），超出的任务排队等待。用户说“同时最多跑 N 个任务”之类时使用；立即生效。",
+    "en": "Set and persist how many tasks may run at once (1-20, default 3); further tasks wait in a queue. Use when the user says e.g. \"run at most N tasks at a time\"; applies at once."
+  },
+  "parameters": {
+    "zh": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "integer",
+          "description": "同时运行的任务个数（1-20）"
+        }
+      },
+      "required": [
+        "tasks"
+      ]
+    },
+    "en": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "integer",
+          "description": "tasks that may run at once (1-20)"
+        }
+      },
+      "required": [
+        "tasks"
+      ]
+    }
+  },
+  "permission": "system",
+  "modes": [
+    "chat",
+    "project"
+  ]
+}

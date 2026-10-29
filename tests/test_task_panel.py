@@ -68,7 +68,7 @@ def test_the_page_sits_against_the_dialog():
 def test_pause_resume_and_stop_reach_the_bus():
     QtWidgets = pytest.importorskip("PySide6.QtWidgets")
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])  # noqa: F841
-    from pillow_assistant.ui.task_panel import TaskPanel
+    from pillow_assistant.ui.task_panel import TaskPage
 
     class Bus:
         def __init__(self):
@@ -84,7 +84,7 @@ def test_pause_resume_and_stop_reach_the_bus():
             self.calls.append(("cancel", rid))
 
     bus = Bus()
-    panel = TaskPanel("整理下载文件夹", bus=bus, request_id="r")
+    panel = TaskPage("整理下载文件夹", bus=bus, request_id="r")
     panel.set_step("第 1/200 步 · file_list")
     assert panel.state == "running"
     panel._toggle_pause()
