@@ -53,9 +53,14 @@ class StatusIcon(QWidget):
         super().__init__(parent)
         self.setFixedSize(16, 16)
         self.shape, self.colour = STATES["preparing"]
+        self.waiting = False
 
     def set_state(self, state: str) -> None:
         self.shape, self.colour = STATES.get(state, STATES["stopped"])
+        self.update()
+
+    def set_waiting(self, waiting: bool) -> None:
+        self.waiting = waiting
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -72,6 +77,12 @@ class StatusIcon(QWidget):
             painter.drawRect(10, 2, 3, 12)
         else:
             painter.drawRect(3, 3, 10, 10)
+        if self.waiting:  # an orange "!" over the state: the task waits for the user
+            painter.setBrush(QColor("#F08C00"))
+            painter.drawEllipse(7, 0, 9, 9)
+            painter.setBrush(QColor("#FFFFFF"))
+            painter.drawRect(11, 2, 1, 4)
+            painter.drawRect(11, 7, 1, 1)
         painter.end()
 
 
@@ -86,8 +97,8 @@ def beside(dialog: QRect, width: int, area: QRect) -> QRect:
 
 
 def tab_order(pages: list) -> list:
-    """Pages as their tabs line up: still-running work first, newest first within a state."""
-    return sorted(pages, key=lambda p: (ORDER.get(p.state, 9), -p.started))
+    """Pages as their tabs line up: waiting for the user, then still-running work, newest first."""
+    return sorted(pages, key=lambda p: (-1 if p.waiting else ORDER.get(p.state, 9), -p.started))
 
 
 class TaskPage(QWidget):
@@ -95,12 +106,18 @@ class TaskPage(QWidget):
 
     def __init__(self, title: str, bus=None, request_id: Optional[str] = None, started: Optional[float] = None,
                  project: str = "", on_followup: Optional[Callable[[str], None]] = None,
-                 on_change: Optional[Callable[[], None]] = None, parent=None) -> None:
+                 on_change: Optional[Callable[[], None]] = None, on_switch: Optional[Callable[[str], None]] = None,
+                 parent=None) -> None:
         super().__init__(parent)
         self.bus = bus
         self.request_id = request_id
         self.title_text = title
         self.project = project
+        self.project_id = ""
+        self.other_project = False  # not the dialog's current project
+        self.waiting = False
+        self.seen = False  # looked at after it ended: may be archived
+        self._on_switch = on_switch
         self.started = started or time.time()
         self._state = "preparing"
         self._step = ""
@@ -117,6 +134,10 @@ class TaskPage(QWidget):
         self.title.setStyleSheet("font-weight: bold;")
         self.title.setWordWrap(True)
         head.addWidget(self.title, 1)
+        self.switch_btn = QPushButton(t("task.switch_project"), self)
+        self.switch_btn.clicked.connect(lambda: self._on_switch and self._on_switch(self.project_id))
+        self.switch_btn.hide()
+        head.addWidget(self.switch_btn, 0, Qt.AlignTop)
         outer.addLayout(head)
         self.meta = QLabel(self)
         self.meta.setWordWrap(True)
@@ -161,8 +182,27 @@ class TaskPage(QWidget):
             self.set_state("running")
         self._refresh_meta()
 
+    def set_project(self, name: str, project_id: str, other: bool) -> None:
+        self.project, self.project_id, self.other_project = name, project_id, other
+        self.switch_btn.setVisible(bool(other and project_id and self._on_switch))
+        self._refresh_meta()
+        if self._on_change is not None:
+            self._on_change()
+
+    def set_waiting(self, waiting: bool) -> None:
+        if waiting == self.waiting:
+            return
+        self.waiting = waiting
+        self.icon.set_waiting(waiting)
+        self._refresh_meta()
+        if self._on_change is not None:
+            self._on_change()
+
     def set_state(self, state: str) -> None:
         self._state = state
+        if state in ("done", "stopped"):
+            self.waiting = False
+            self.icon.set_waiting(False)
         self.icon.set_state(state)
         finished = state in ("done", "stopped")
         self.pause_btn.setVisible(not finished)
@@ -180,7 +220,10 @@ class TaskPage(QWidget):
 
     def _refresh_meta(self) -> None:
         seconds = int(time.time() - self.started)
-        parts = [t(f"task.state.{self._state}"), f"{seconds // 60}:{seconds % 60:02d}"]
+        parts = [t("task.waiting") if self.waiting else t(f"task.state.{self._state}"),
+                 f"{seconds // 60}:{seconds % 60:02d}"]
+        if self.project:
+            parts.insert(0, self.project + (" ↗" if self.other_project else ""))
         if self._step and self._state not in ("done", "stopped"):
             parts.append(self._step)
         self.meta.setText(" · ".join(parts))
@@ -240,8 +283,11 @@ class _Tab(QPushButton):
         self.name.setText(self.name.fontMetrics().elidedText(page.title_text, Qt.ElideRight, TAB_WIDTH - 48))
         row.addWidget(self.name, 1, Qt.AlignVCenter)
         lay.addLayout(row)
-        self.sub = QLabel(page.project, self)
+        self.sub = QLabel(self)
         self.sub.setStyleSheet("font-size: 11px; color: #6B7684; background: transparent; padding-left: 22px;")
+        mark = " ↗" if page.other_project else ""  # another project's task: the mark always shows
+        room = TAB_WIDTH - 54 - self.sub.fontMetrics().horizontalAdvance(mark)
+        self.sub.setText(self.sub.fontMetrics().elidedText(page.project, Qt.ElideRight, room) + mark)
         self.sub.setVisible(bool(page.project))
         lay.addWidget(self.sub)
         lay.addStretch(1)
@@ -250,17 +296,36 @@ class _Tab(QPushButton):
 
     def refresh(self) -> None:
         self.icon.set_state(self.page.state)
+        self.icon.set_waiting(self.page.waiting)
 
 
 class TaskPanel(QWidget):
-    """The window: the selected task's page on the left, the tabs on the right."""
+    """The window: the selected task's page on the left, the tabs on the right.
 
-    def __init__(self, bus=None, on_followup: Optional[Callable[[str], None]] = None, parent=None) -> None:
+    It follows the bus itself, so a panel dragged out as its own window keeps
+    updating after the dialog closes. Docked, it sits against the dialog and closes
+    with it; dragged anywhere it becomes a separate window (double-click docks it)."""
+
+    detached: Optional["TaskPanel"] = None  # the panel living on as its own window
+    ARCHIVE_AFTER_MS = 10 * 60 * 1000  # a finished task the user has seen leaves the tabs
+
+    def __init__(self, bus=None, on_followup: Optional[Callable[[str], None]] = None,
+                 current_project: Optional[Callable[[], Optional[str]]] = None,
+                 on_switch: Optional[Callable[[str], None]] = None, on_dock: Optional[Callable[[], None]] = None,
+                 parent=None) -> None:
         super().__init__(parent)
         self.bus = bus
         self._on_followup = on_followup
+        self._current_project = current_project or (lambda: None)
+        self._on_switch = on_switch
+        self._on_dock = on_dock
+        self.docked = True
+        self._drag_from: Optional[QPoint] = None
         self.pages: dict[str, TaskPage] = {}
         self.current: Optional[str] = None
+        self.setToolTip(t("task.detach_tip"))
+        if bus is not None and hasattr(bus, "event"):
+            bus.event.connect(self.on_event)
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -300,7 +365,9 @@ class TaskPanel(QWidget):
         page = self.pages.get(request_id)
         if page is None:
             page = TaskPage(title, bus=self.bus, request_id=request_id, started=started, project=project,
-                            on_followup=self._on_followup, on_change=self._relayout, parent=self)
+                            on_followup=lambda text: self._on_followup and self._on_followup(text),
+                            on_change=self._page_changed,
+                            on_switch=lambda pid: self._on_switch and self._on_switch(pid), parent=self)
             self.pages[request_id] = page
             self.stack.addWidget(page)
         self.select(request_id)
@@ -315,7 +382,73 @@ class TaskPanel(QWidget):
             return
         self.current = request_id
         self.stack.setCurrentWidget(page)
+        self._page_changed()
+
+    def remove(self, request_id: str) -> None:
+        page = self.pages.pop(request_id, None)
+        if page is None:
+            return
+        self.stack.removeWidget(page)
+        page.deleteLater()
+        if self.current == request_id:
+            self.current = next(iter(tab_order(list(self.pages.values()))), None)
+            if self.current:
+                self.stack.setCurrentWidget(self.pages[self.current])
         self._relayout()
+
+    def _page_changed(self) -> None:
+        """Re-order the tabs; a finished task once looked at is archived a while later."""
+        current = self.pages.get(self.current)
+        if current is not None and current.state in ("done", "stopped") and not current.seen:
+            current.seen = True
+            QTimer.singleShot(self.ARCHIVE_AFTER_MS, lambda rid=current.request_id: self._archive(rid))
+        self._relayout()
+
+    def _archive(self, request_id: str) -> None:
+        if request_id == self.current and self.isVisible():
+            QTimer.singleShot(self.ARCHIVE_AFTER_MS, lambda: self._archive(request_id))  # still being read
+            return
+        self.remove(request_id)
+
+    def bind(self, on_followup=None, current_project=None, on_switch=None, on_dock=None) -> None:
+        """A new dialog takes over a panel that outlived its own (dragged out as a window)."""
+        self._on_followup, self._on_switch, self._on_dock = on_followup, on_switch, on_dock
+        if current_project is not None:
+            self._current_project = current_project
+
+    # -- what the runs report ----------------------------------------------------
+    def on_event(self, event) -> None:
+        from pillow_assistant.contracts import EventType
+        from pillow_assistant.ui.run_tracker import is_dialog_text
+
+        try:
+            page = self.pages.get(event.request_id)
+        except RuntimeError:
+            return
+        if page is None:
+            return
+        meta = event.meta or {}
+        if event.type == EventType.TOOL_START:
+            if not meta.get("status"):
+                page.set_waiting(False)
+                page.set_step(t("tool.status.running", step=meta.get("step", 1), total=meta.get("total", "?"),
+                                name=meta.get("name") or event.text))
+            else:
+                page.set_step(meta["status"], queued=bool(meta.get("queued")))
+        elif event.type == EventType.ASK:
+            page.set_waiting(True)
+        elif event.type == EventType.TOOL_RESULT:
+            page.set_waiting(False)
+        elif event.type == EventType.TOKEN:
+            if meta.get("project") is not None:
+                pid = meta.get("project_id") or ""
+                page.set_project(meta["project"], pid, bool(pid) and pid != self._current_project())
+            if not is_dialog_text(event):
+                page.append(event.text)
+        elif event.type == EventType.ERROR:
+            page.set_state("stopped")
+        elif event.type == EventType.DONE:
+            page.set_state("stopped" if meta.get("cancelled") else "done")
 
     # -- tabs --------------------------------------------------------------------
     def _relayout(self) -> None:
@@ -351,6 +484,41 @@ class TaskPanel(QWidget):
             action.triggered.connect(lambda _=False, rid=page.request_id: self.select(rid))
         menu.exec(under.mapToGlobal(QPoint(0, under.height())))
 
+    # -- docking ---------------------------------------------------------------
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self._drag_from = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_from is not None and event.buttons() & Qt.LeftButton:
+            self.docked = False  # moved by hand: a window of its own from now on
+            TaskPanel.detached = self
+            self.move(event.globalPosition().toPoint() - self._drag_from)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._drag_from = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        self.docked = True
+        if TaskPanel.detached is self:
+            TaskPanel.detached = None
+        if self._on_dock is not None:
+            self._on_dock()
+        super().mouseDoubleClickEvent(event)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if TaskPanel.detached is self:
+            TaskPanel.detached = None
+        if self.bus is not None and hasattr(self.bus, "event"):
+            try:
+                self.bus.event.disconnect(self.on_event)
+            except (RuntimeError, TypeError):
+                pass
+        super().closeEvent(event)
+
     # -- placement and look ----------------------------------------------------
     def place_beside(self, dialog: QWidget) -> None:
         screen = dialog.screen()
@@ -367,3 +535,24 @@ class TaskPanel(QWidget):
         painter.setPen(QPen(QColor(255, 255, 255, 195), 1))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 18, 18)
         painter.end()
+
+
+class Toast(QLabel):
+    """A short notice near the button that goes away by itself; a click acts on it."""
+
+    def __init__(self, text: str, on_click: Optional[Callable[[], None]] = None, ms: int = 8000) -> None:
+        super().__init__(text)
+        self._on_click = on_click
+        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setStyleSheet("QLabel { color: #FFFFFF; background: rgba(24,34,48,235); border-radius: 10px;"
+                           " padding: 10px 14px; font-weight: bold; }")
+        self.setWordWrap(True)
+        self.setMaximumWidth(360)
+        QTimer.singleShot(ms, self.close)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if self._on_click is not None:
+            self._on_click()
+        self.close()
