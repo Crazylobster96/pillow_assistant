@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -15,6 +15,26 @@ from pillow_assistant.core.project_manager import remember_binding
 from pillow_assistant.ui.config_dialog import ModelConfigDialog
 from pillow_assistant.ui.quick_input import QuickInputBar
 from pillow_assistant.ui.radial_menu import RadialMenu
+
+
+
+class _OnClose(QObject):
+    """Calls back once when the watched window closes (whether or not it is deleted)."""
+
+    def __init__(self, window, callback) -> None:
+        super().__init__(window)
+        self._callback = callback
+        window.installEventFilter(self)
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        if event.type() == QEvent.Close and self._callback is not None:
+            callback, self._callback = self._callback, None
+            QTimer.singleShot(0, callback)  # after the close (and the menu's action) has run
+        return False
+
+
+def when_closed(window, callback) -> None:
+    _OnClose(window, callback)
 
 
 class WindowCoordinator:
@@ -301,8 +321,39 @@ class WindowCoordinator:
         )
         self.set_window("radial", menu)
         menu.destroyed.connect(lambda *_, item=menu: self.clear_window("radial", item))
+        when_closed(menu, self.after_menu_closed)
         menu.show()
         menu.raise_()
+
+    def after_menu_closed(self) -> None:
+        """The menu is gone: the dialog it pushed aside goes back next to the button, once
+        whatever window the menu opened (projects, memory, settings) is closed too."""
+        opened = []
+        for name in ("projects", "memory"):
+            window = self.window(name)
+            try:
+                if window is not None and window.isVisible():
+                    opened.append(window)
+            except RuntimeError:  # already deleted
+                pass
+        if opened:
+            for window in opened:
+                when_closed(window, self.after_menu_closed)
+            return
+        self.restore_room_for_menu()
+
+    def restore_room_for_menu(self) -> None:
+        moved = getattr(self, "_menu_moved", None)
+        self._menu_moved = None
+        if moved is None:
+            return
+        bar, home, pushed = moved
+        try:
+            # Only if it is still where the menu put it: a dialog the user dragged stays put.
+            if bar is self.quick and bar.isVisible() and bar.pos() == pushed:
+                bar.move(home)
+        except RuntimeError:
+            pass
 
     def make_room_for_menu(self):
         bar = self.quick
@@ -317,7 +368,9 @@ class WindowCoordinator:
         if y + geometry.height() > available.bottom():
             y = max(available.top(), center.y() - clearance - geometry.height())
         x = min(max(geometry.x(), available.left()), max(available.left(), available.right() - geometry.width()))
+        home = bar.pos() if getattr(self, "_menu_moved", None) is None else self._menu_moved[1]
         bar.move(x, y)
+        self._menu_moved = (bar, home, bar.pos())  # put back by restore_room_for_menu
         return bar.frameGeometry()
 
     def close_radial(self) -> None:
