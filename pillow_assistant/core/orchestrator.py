@@ -271,7 +271,8 @@ class Orchestrator:
 
         hint = cad_upgrade_hint(request.prompt)
         if hint:
-            await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=hint + "\n"))
+            await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=hint + "\n",
+                                  meta={"notice": True}))
 
         index = self.pm.store.index()
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session is not None else None
