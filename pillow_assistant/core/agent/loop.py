@@ -155,6 +155,9 @@ class ToolLoopAgent:
             self._step = step
             self._drop_images(messages, step=step)
             await run_control.checkpoint(request_id)  # held here while the user paused the task
+            for words in run_control.take_messages(request_id):
+                # Said to this task while it ran ("对它说"): read before the next step.
+                messages.append({"role": "user", "content": t("loop.user_added", text=words)})
             t0 = time.time()
 
             async def progress(chars: int, thinking: int = 0, _step=step, _t0=t0) -> None:

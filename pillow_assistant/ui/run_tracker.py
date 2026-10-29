@@ -64,6 +64,10 @@ class RunTracker(QObject):
     def get(self, request_id: Optional[str]) -> Optional[Run]:
         return self._state.runs.get(request_id) if request_id else None
 
+    def running(self) -> list[Run]:
+        """Every request still running, oldest first."""
+        return sorted((r for r in self._state.runs.values() if r.running), key=lambda r: r.order)
+
     def latest_running(self) -> Optional[Run]:
         running = [r for r in self._state.runs.values() if r.running]
         return max(running, key=lambda r: r.order) if running else None

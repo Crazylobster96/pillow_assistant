@@ -35,6 +35,8 @@ class EventBus(QObject):
         super().__init__(parent)
         self._handler = handler
         self._tasks: dict[str, asyncio.Task] = {}  # touched only on the bus loop
+        self._running = 0  # requests past the limit wait on _slots (bus loop only)
+        self._slots: asyncio.Condition | None = None
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._run_loop, name="pillow-bus", daemon=True)
         self._thread.start()
@@ -62,6 +64,12 @@ class EventBus(QObject):
 
         self._loop.call_soon_threadsafe(run_control.resume, request_id)
 
+    def tell(self, request_id: str, text: str) -> None:
+        """Add the user's words to a running request; it reads them before its next step."""
+        from pillow_assistant.core import run_control
+
+        self._loop.call_soon_threadsafe(run_control.tell, request_id, text)
+
     def _cancel(self, request_id: str) -> None:
         task = self._tasks.get(request_id)
         if task is not None and not task.done():
@@ -73,10 +81,24 @@ class EventBus(QObject):
             # slots via Qt's queued connection mechanism.
             self.event.emit(ev)
 
+        from pillow_assistant.core import run_control
+        from pillow_assistant.core.i18n import t
+
         task = asyncio.current_task()
         if task is not None:
             self._tasks[request.id] = task
+        if self._slots is None:
+            self._slots = asyncio.Condition()
+        started = False
         try:
+            async with self._slots:
+                if self._running >= run_control.max_tasks():
+                    self.event.emit(AgentEvent(request_id=request.id, type=EventType.TOOL_START, text="",
+                                               meta={"status": t("task.queued", n=run_control.max_tasks()),
+                                                     "queued": True}))
+                await self._slots.wait_for(lambda: self._running < run_control.max_tasks())
+                self._running += 1
+                started = True
             await self._handler(request, emit)
         except asyncio.CancelledError:
             self.event.emit(AgentEvent(request_id=request.id, type=EventType.DONE,
@@ -85,9 +107,11 @@ class EventBus(QObject):
             self.event.emit(AgentEvent(request_id=request.id, type=EventType.ERROR, text=str(exc)))
         finally:
             self._tasks.pop(request.id, None)
-            from pillow_assistant.core import run_control
-
             run_control.forget(request.id)
+            if started:
+                async with self._slots:
+                    self._running -= 1
+                    self._slots.notify_all()
 
     def shutdown(self) -> None:
         """Stop the background loop; safe to call from the Qt main thread."""

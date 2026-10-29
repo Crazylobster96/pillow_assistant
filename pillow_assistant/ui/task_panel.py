@@ -1,11 +1,15 @@
-"""The task page beside the question dialog (phase 1: one task at a time).
+"""The task panel beside the question dialog: one page per task, tabs down its right side.
 
-The dialog shows only the conversation: the user's words and the answer. Once a
-request starts using tools it is a task, and its process goes here instead:
-status, step and time, the steps and tool output, the independent checks, and
-pause / continue / stop. The panel sits against the dialog (right, else left,
-top edges aligned, same height) and moves and closes with it; the run itself
-keeps going on the bus when the dialog closes.
+The dialog shows only the conversation: the user's words and the answers. Once a
+request starts using tools it is a task, and its process goes to its own page
+here: status, step and time, the steps and tool output, the independent checks,
+pause / continue / stop, and a "tell it" box that reaches a running task before its
+next step. Several tasks run at once (``core/run_control.max_tasks``); each has a
+tab with its status icon. At most MAX_TABS tabs show, ordered running > preparing >
+stopped > finished (newest first within each); the rest sit under "more", and
+"all" lists every task. The panel sits against the dialog (right, else left, top
+edges aligned, same height) and moves and closes with it; the runs keep going on
+the bus when the dialog closes.
 
 Status icons: green triangle = running, yellow dot = preparing, red bars = paused,
 green square = finished, grey square = stopped or failed.
@@ -14,17 +18,21 @@ green square = finished, grey square = stopped or failed.
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygon, QTextCursor
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout, QLabel, QLineEdit, QMenu, QPlainTextEdit, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+)
 
 from pillow_assistant.core.i18n import t
 from pillow_assistant.ui.acrylic import glass_opacity
 
-PANEL_WIDTH = 420
+PANEL_WIDTH = 560
+TAB_WIDTH = 132
 GAP = 8
+MAX_TABS = 5
 
 # state -> (shape, colour); drawn, not typed, so no font can turn them into boxes
 STATES = {
@@ -34,6 +42,8 @@ STATES = {
     "done": ("square", "#1E9E4A"),
     "stopped": ("square", "#8A929C"),
 }
+# tab order: what still needs watching first
+ORDER = {"running": 0, "paused": 0, "preparing": 1, "stopped": 2, "done": 3}
 
 
 class StatusIcon(QWidget):
@@ -75,32 +85,35 @@ def beside(dialog: QRect, width: int, area: QRect) -> QRect:
     return QRect(x, dialog.top(), width, dialog.height())
 
 
-class TaskPanel(QWidget):
+def tab_order(pages: list) -> list:
+    """Pages as their tabs line up: still-running work first, newest first within a state."""
+    return sorted(pages, key=lambda p: (ORDER.get(p.state, 9), -p.started))
+
+
+class TaskPage(QWidget):
+    """One task: header, status, log, pause / continue / stop, and a box to tell it more."""
+
     def __init__(self, title: str, bus=None, request_id: Optional[str] = None, started: Optional[float] = None,
-                 parent=None) -> None:
+                 project: str = "", on_followup: Optional[Callable[[str], None]] = None,
+                 on_change: Optional[Callable[[], None]] = None, parent=None) -> None:
         super().__init__(parent)
         self.bus = bus
         self.request_id = request_id
-        self._started = started or time.time()
+        self.title_text = title
+        self.project = project
+        self.started = started or time.time()
         self._state = "preparing"
         self._step = ""
-        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setObjectName("taskPanel")
-        from pillow_assistant.ui.quick_input import panel_qss  # same glass look as the dialog
-
-        self._opacity = glass_opacity()
-        self.setStyleSheet(panel_qss(self._opacity))
+        self._on_followup = on_followup  # a finished task: what is said goes as a new request
+        self._on_change = on_change  # the panel re-orders its tabs
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(8)
         head = QHBoxLayout()
         self.icon = StatusIcon(self)
         head.addWidget(self.icon, 0, Qt.AlignTop)
         self.title = QLabel(title, self)
-        self.title.setObjectName("taskTitle")
         self.title.setStyleSheet("font-weight: bold;")
         self.title.setWordWrap(True)
         head.addWidget(self.title, 1)
@@ -113,6 +126,11 @@ class TaskPanel(QWidget):
         self.log = QPlainTextEdit(self)
         self.log.setReadOnly(True)
         outer.addWidget(self.log, 1)
+
+        self.say = QLineEdit(self)
+        self.say.setPlaceholderText(t("task.say"))
+        self.say.returnPressed.connect(self._tell)
+        outer.addWidget(self.say)
 
         buttons = QHBoxLayout()
         buttons.addStretch(1)
@@ -137,9 +155,9 @@ class TaskPanel(QWidget):
         self.log.insertPlainText(text)
         self.log.moveCursor(QTextCursor.MoveOperation.End)
 
-    def set_step(self, text: str) -> None:
+    def set_step(self, text: str, queued: bool = False) -> None:
         self._step = text or ""
-        if self._state == "preparing":
+        if self._state == "preparing" and not queued:
             self.set_state("running")
         self._refresh_meta()
 
@@ -153,19 +171,33 @@ class TaskPanel(QWidget):
         if finished:
             self._clock.stop()
         self._refresh_meta()
+        if self._on_change is not None:
+            self._on_change()
 
     @property
     def state(self) -> str:
         return self._state
 
     def _refresh_meta(self) -> None:
-        seconds = int(time.time() - self._started)
+        seconds = int(time.time() - self.started)
         parts = [t(f"task.state.{self._state}"), f"{seconds // 60}:{seconds % 60:02d}"]
         if self._step and self._state not in ("done", "stopped"):
             parts.append(self._step)
         self.meta.setText(" · ".join(parts))
 
-    # -- buttons ---------------------------------------------------------------
+    # -- what the user does ----------------------------------------------------
+    def _tell(self) -> None:
+        text = self.say.text().strip()
+        if not text:
+            return
+        self.say.clear()
+        self.append(f"\n【{t('role.user')}】{text}\n")
+        if self._state in ("done", "stopped"):
+            if self._on_followup is not None:
+                self._on_followup(text)  # a new round: the intent check decides where it goes
+        elif self.bus is not None and self.request_id:
+            self.bus.tell(self.request_id, text)
+
     def _toggle_pause(self) -> None:
         if self.bus is None or not self.request_id:
             return
@@ -183,6 +215,138 @@ class TaskPanel(QWidget):
             self.bus.resume(self.request_id)  # a paused task must reach the cancellation point
         self.stop_btn.setEnabled(False)
         self.bus.cancel(self.request_id)
+
+
+class _Tab(QPushButton):
+    """A tab down the panel's right side: status icon + short name, project underneath."""
+
+    def __init__(self, page: TaskPage, parent=None) -> None:
+        super().__init__(parent)
+        self.page = page
+        self.setCheckable(True)
+        self.setFixedWidth(TAB_WIDTH - 12)
+        self.setMinimumHeight(36)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 4, 6, 4)
+        lay.setSpacing(6)
+        self.icon = StatusIcon(self)
+        lay.addWidget(self.icon, 0, Qt.AlignTop)
+        text = QVBoxLayout()
+        text.setSpacing(0)
+        self.name = QLabel(self)
+        self.name.setStyleSheet("font-size: 12px; background: transparent;")
+        self.name.setText(self.name.fontMetrics().elidedText(page.title_text, Qt.ElideRight, TAB_WIDTH - 48))
+        text.addWidget(self.name)
+        self.sub = QLabel(page.project, self)
+        self.sub.setStyleSheet("font-size: 11px; color: #6B7684; background: transparent;")
+        self.sub.setVisible(bool(page.project))
+        text.addWidget(self.sub)
+        lay.addLayout(text, 1)
+        self.setToolTip(page.title_text)
+        self.refresh()
+
+    def refresh(self) -> None:
+        self.icon.set_state(self.page.state)
+
+
+class TaskPanel(QWidget):
+    """The window: the selected task's page on the left, the tabs on the right."""
+
+    def __init__(self, bus=None, on_followup: Optional[Callable[[str], None]] = None, parent=None) -> None:
+        super().__init__(parent)
+        self.bus = bus
+        self._on_followup = on_followup
+        self.pages: dict[str, TaskPage] = {}
+        self.current: Optional[str] = None
+        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setObjectName("taskPanel")
+        from pillow_assistant.ui.quick_input import panel_qss  # same glass look as the dialog
+
+        self._opacity = glass_opacity()
+        self.setStyleSheet(panel_qss(self._opacity) + "QPushButton:checked { background: rgba(74,124,200,60); }")
+
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(10)
+        self.stack = QStackedWidget(self)
+        outer.addWidget(self.stack, 1)
+        column = QVBoxLayout()
+        column.setSpacing(6)
+        self.tabs_box = QVBoxLayout()
+        self.tabs_box.setSpacing(6)
+        column.addLayout(self.tabs_box)
+        self.more_btn = QPushButton(self)
+        self.more_btn.clicked.connect(self._show_more)
+        column.addWidget(self.more_btn)
+        column.addStretch(1)
+        self.all_btn = QPushButton(t("task.all"), self)
+        self.all_btn.clicked.connect(lambda: self._menu(list(self.pages.values()), self.all_btn))
+        column.addWidget(self.all_btn)
+        holder = QWidget(self)
+        holder.setFixedWidth(TAB_WIDTH)
+        holder.setLayout(column)
+        outer.addWidget(holder, 0)
+        self._tabs: list[_Tab] = []
+        self._hidden: list[TaskPage] = []
+        self._relayout()
+
+    # -- pages -------------------------------------------------------------------
+    def add(self, request_id: str, title: str, project: str = "", started: Optional[float] = None) -> TaskPage:
+        page = self.pages.get(request_id)
+        if page is None:
+            page = TaskPage(title, bus=self.bus, request_id=request_id, started=started, project=project,
+                            on_followup=self._on_followup, on_change=self._relayout, parent=self)
+            self.pages[request_id] = page
+            self.stack.addWidget(page)
+        self.select(request_id)
+        return page
+
+    def page(self, request_id: Optional[str]) -> Optional[TaskPage]:
+        return self.pages.get(request_id) if request_id else None
+
+    def select(self, request_id: str) -> None:
+        page = self.pages.get(request_id)
+        if page is None:
+            return
+        self.current = request_id
+        self.stack.setCurrentWidget(page)
+        self._relayout()
+
+    # -- tabs --------------------------------------------------------------------
+    def _relayout(self) -> None:
+        if not hasattr(self, "tabs_box"):
+            return
+        ordered = tab_order(list(self.pages.values()))
+        shown = ordered[:MAX_TABS]
+        current = self.pages.get(self.current)
+        if current is not None and current not in shown and shown:
+            shown[-1] = current  # the page being looked at keeps its tab
+        self._hidden = [p for p in ordered if p not in shown]
+        for tab in self._tabs:
+            tab.setParent(None)
+            tab.deleteLater()
+        self._tabs = []
+        for page in shown:
+            tab = _Tab(page, self)
+            tab.setChecked(page.request_id == self.current)
+            tab.clicked.connect(lambda _=False, rid=page.request_id: self.select(rid))
+            self.tabs_box.addWidget(tab)
+            self._tabs.append(tab)
+        self.more_btn.setText(t("task.more", n=len(self._hidden)))
+        self.more_btn.setVisible(bool(self._hidden))
+        self.all_btn.setVisible(len(self.pages) > 1)
+
+    def _show_more(self) -> None:
+        self._menu(self._hidden, self.more_btn)
+
+    def _menu(self, pages: list, under: QWidget) -> None:
+        menu = QMenu(self)
+        for page in tab_order(pages):
+            action = menu.addAction(f"{t(f'task.state.{page.state}')} · {page.title_text[:30]}")
+            action.triggered.connect(lambda _=False, rid=page.request_id: self.select(rid))
+        menu.exec(under.mapToGlobal(QPoint(0, under.height())))
 
     # -- placement and look ----------------------------------------------------
     def place_beside(self, dialog: QWidget) -> None:
