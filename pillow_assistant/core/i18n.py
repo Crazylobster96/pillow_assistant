@@ -37,7 +37,7 @@ _ZH = {
     "voice.failed": "转写失败或为空，请输入文字",
     "asr.no_backend": "没有可用的 ASR 后端：pip install funasr 或 faster-whisper",
     # -- quick input bar -----------------------------------------------------
-    "input.placeholder": "输入问题，回车发送（Esc 关闭）",
+    "input.placeholder": "输入问题，回车发送，Shift+回车换行（Esc 关闭）",
     "input.no_models": "尚未配置模型，请先右键 → 配置",
     "input.close_tip": "关闭（Esc）",
     "input.stop": "■ 停止",
@@ -429,7 +429,7 @@ _EN = {
     "voice.transcribing": "Transcribing… (first run downloads the model)",
     "voice.failed": "Transcription failed or empty — please type",
     "asr.no_backend": "No ASR backend available: pip install funasr or faster-whisper",
-    "input.placeholder": "Ask anything, Enter to send (Esc to close)",
+    "input.placeholder": "Ask anything, Enter to send, Shift+Enter for a new line (Esc to close)",
     "input.no_models": "No model configured — right-click the icon → Settings",
     "input.close_tip": "Close (Esc)",
     "input.stop": "■ Stop",
