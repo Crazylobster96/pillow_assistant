@@ -20,7 +20,8 @@ MULTI_BAR_SPACE = 170  # room under the windows for the question bar
 def fit_windows(sizes: list, area: tuple, layout: str = "row") -> tuple:
     """Screen boxes (x, y, w, h) for windows that want ``sizes``, side by side ("row") or
     stacked ("column") in ``area`` (x, y, w, h): each keeps its own size up to its share of
-    the screen, and the group is centred. Also returns the y for the question bar."""
+    the screen, except that windows side by side share the tallest height and stacked ones
+    the widest width; the group is centred. Also returns the y for the question bar."""
     ax, ay, aw, ah = area
     count = max(1, len(sizes))
     if layout == "column":
@@ -28,6 +29,13 @@ def fit_windows(sizes: list, area: tuple, layout: str = "row") -> tuple:
     else:
         share_w, share_h = (aw - MULTI_GAP * (count - 1)) // count, int(ah * 0.72)
     fitted = [(min(max(w, 320), share_w), min(max(h, 240), share_h)) for w, h in sizes]
+    # Side by side they share one height, stacked one width: ragged edges look broken.
+    if layout == "column":
+        widest = max((w for w, _ in fitted), default=0)
+        fitted = [(widest, h) for _, h in fitted]
+    else:
+        tallest = max((h for _, h in fitted), default=0)
+        fitted = [(w, tallest) for w, _ in fitted]
     if layout == "column":
         total = sum(h for _, h in fitted) + MULTI_GAP * (len(fitted) - 1)
         y = ay + max(0, (ah - MULTI_BAR_SPACE - total) // 2)
