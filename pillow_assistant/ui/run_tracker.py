@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, Signal
 
 from pillow_assistant.contracts import AgentEvent, EventType
 
@@ -35,6 +35,8 @@ class Run:
     text: str = ""  # what the dialog shows: the answer and notices
     log: str = ""  # the task's process: steps, tool output, checks
     is_task: bool = False  # a tool ran: it has a task page
+    project: str = ""  # the project it landed in (its name), "" until known
+    project_id: str = ""
     started: float = 0.0
     last_event: Optional[AgentEvent] = None
     running: bool = True
@@ -50,6 +52,7 @@ class _State:
 
 
 class RunTracker(QObject):
+    finished = Signal(object)  # a Run that has just ended (done, stopped or failed)
     def __init__(self, bus=None, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._state = _State()
@@ -76,6 +79,9 @@ class RunTracker(QObject):
         run = self._state.runs.get(getattr(event, "request_id", None))
         if run is None:
             return
+        if event.type == EventType.TOKEN and (event.meta or {}).get("project") is not None:
+            run.project = event.meta["project"]
+            run.project_id = event.meta.get("project_id") or ""
         if event.type == EventType.TOKEN:
             if is_dialog_text(event):
                 run.text += event.text or ""
@@ -84,8 +90,11 @@ class RunTracker(QObject):
         elif event.type == EventType.TOOL_START and not (event.meta or {}).get("status"):
             run.is_task = True
         elif event.type in (EventType.DONE, EventType.ERROR):
+            was_running = run.running
             run.running = False
             run.cancelled = bool((event.meta or {}).get("cancelled"))
+            if was_running:
+                self.finished.emit(run)
         if event.type != EventType.TOKEN:
             run.last_event = event
 

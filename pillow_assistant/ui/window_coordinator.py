@@ -73,6 +73,8 @@ class WindowCoordinator:
                  tracker=None) -> None:
         self.anchor = anchor
         self.tracker = tracker
+        if tracker is not None and hasattr(tracker, "finished"):
+            tracker.finished.connect(self.on_run_finished)
         self.storage = storage
         self.bus = bus
         self.session = session
@@ -337,6 +339,7 @@ class WindowCoordinator:
             open_reference=lambda path: self.open_file_panel([path], as_reference=False),
             history=self.recent_history(),
             tracker=self.tracker,
+            switch_project=self.switch_to_project_id,
         )
         self.set_window("quick", bar)
         bar.destroyed.connect(lambda *_, item=bar: self.clear_window("quick", item))
@@ -436,6 +439,24 @@ class WindowCoordinator:
         window.show()
         window.raise_()
         window.activateWindow()
+
+    def switch_to_project_id(self, project_id: str) -> None:
+        """"Switch to this project" on a task page: the dialog moves to that project."""
+        project = self.project_store.get(project_id) if self.project_store is not None and project_id else None
+        if project is not None:
+            self.switch_to_project(project)
+
+    def on_run_finished(self, run) -> None:
+        """A task in another project ended: say so, whatever is open."""
+        current = getattr(self.session, "project_id", None) if self.session is not None else None
+        if not run.is_task or not run.project_id or run.project_id == current:
+            return
+        from pillow_assistant.ui.task_panel import Toast
+
+        toast = Toast(t("task.other_done", project=run.project, title=run.prompt[:30]),
+                      on_click=lambda: self.open_quick_input(close_displays=False))
+        self.place_near_icon(toast)
+        toast.show()
 
     def switch_to_project(self, project) -> None:
         if self.session is not None:

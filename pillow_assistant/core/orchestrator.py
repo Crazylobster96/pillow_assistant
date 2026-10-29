@@ -343,7 +343,8 @@ class Orchestrator:
         else:
             note = t("core.project_note", name=project.name) + (
                 t("core.project_continue") if tr.action == "continue" else t("core.project_new"))
-        await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=note + "\n"))
+        await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=note + "\n",
+                              meta={"project": project.name, "project_id": project.id}))
 
         audit = AuditLog(project.root / "audit.jsonl")
         audit.run_start(request.prompt)
@@ -449,7 +450,8 @@ class Orchestrator:
         return dropped
 
     async def _run_chat(self, request, emit, cfg, api_key, context_text, image_paths) -> None:
-        await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=t("core.chat_note") + "\n"))
+        await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=t("core.chat_note") + "\n",
+                              meta={"project": t("task.single_chat"), "project_id": ""}))
         chat_dir = Path.home() / ".pillow" / "chat"
         (chat_dir / "workspace").mkdir(parents=True, exist_ok=True)
         audit = AuditLog(chat_dir / "audit.jsonl")
