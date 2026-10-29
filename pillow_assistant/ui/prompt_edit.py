@@ -8,7 +8,7 @@ taller.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QFrame, QPlainTextEdit, QSizePolicy
 
@@ -49,11 +49,22 @@ class PromptEdit(QPlainTextEdit):
         layout = self.document().documentLayout()
         return max(1, int(round(layout.documentSize().height())))
 
+    def _chrome(self) -> int:
+        """Height the box adds around its text: border and padding from the style sheet."""
+        self.ensurePolished()
+        chrome = self.height() - self.viewport().height()
+        return chrome if chrome > 0 else 18  # not laid out yet: the dialog's 1 px border + 7 px padding
+
     def _fit(self) -> None:
         line = self.fontMetrics().lineSpacing()
         shown = min(self._lines(), MAX_LINES)
-        margins = self.contentsMargins()
-        pad = int(self.document().documentMargin() * 2) + margins.top() + margins.bottom()
-        self.setFixedHeight(line * shown + pad + 6)
+        text = line * shown + int(self.document().documentMargin() * 2) + 2
+        self.setFixedHeight(text + self._chrome())
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded if self._lines() > MAX_LINES
                                         else Qt.ScrollBarAlwaysOff)
+
+    def event(self, event) -> bool:  # noqa: D401
+        handled = super().event(event)
+        if event.type() in (QEvent.StyleChange, QEvent.Show, QEvent.Polish, QEvent.FontChange):
+            self._fit()  # the style sheet's padding is known only once it is applied
+        return handled

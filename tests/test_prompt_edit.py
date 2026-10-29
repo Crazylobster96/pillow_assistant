@@ -52,3 +52,29 @@ def test_enter_sends_and_shift_enter_breaks_the_line(app):
     assert box.text() == "hello\n" and not sent
     QtWidgets.QApplication.sendEvent(box, QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "\r"))
     assert sent == ["hello\n"]
+
+
+def test_the_first_line_is_not_cut_by_the_dialogs_padding(app):
+    """In the dialog the style sheet adds a border and padding: the text area still fits a line."""
+    from PySide6.QtCore import QObject, Signal
+
+    from pillow_assistant.core.session import Session
+    from pillow_assistant.ui.quick_input import QuickInputBar
+
+    class Bus(QObject):
+        event = Signal(object)
+
+    class Storage:
+        def list_model_configs(self):
+            return [{"display_name": "m"}]
+
+    bar = QuickInputBar(Storage(), Bus(), Session())
+    bar.show()
+    app.processEvents()
+    box = bar.prompt_edit
+    need = box.fontMetrics().lineSpacing() + int(box.document().documentMargin() * 2)
+    assert box.viewport().height() >= need
+    box.setText("\n".join("line" for _ in range(3)))
+    app.processEvents()
+    assert box.viewport().height() >= box.fontMetrics().lineSpacing() * 3 + int(box.document().documentMargin() * 2)
+    bar.close()
