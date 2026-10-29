@@ -117,6 +117,12 @@ class Sandbox:
             # One font cache for every run: building it per workspace cost seconds per import.
             "MPLCONFIGDIR": str(Path.home() / ".pillow" / "matplotlib"),
             "HOME": str(self.workspace),
+            # Tools started from a script (uv, cadgen) keep the user's own caches; without these
+            # they put a fresh ~1 GB download under the project for every new workspace.
+            **{k: os.environ[k] for k in ("LOCALAPPDATA", "APPDATA", "USERPROFILE") if k in os.environ},
+            "UV_CACHE_DIR": os.environ.get("UV_CACHE_DIR") or str(
+                (Path(os.environ["LOCALAPPDATA"]) / "uv" / "cache") if os.environ.get("LOCALAPPDATA")
+                else Path.home() / ".cache" / "uv"),
             "TEMP": str(self.workspace),
             "TMP": str(self.workspace),
         }

@@ -10,10 +10,11 @@ import json
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from pillow_assistant.contracts import AgentEvent, AppRequest, EventType
+from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, SurfaceLevel, SurfaceSpec
 from pillow_assistant.core import references
 from pillow_assistant.core.agent.loop import ToolLoopAgent
 from pillow_assistant.core.i18n import t
+from pillow_assistant.core import quick_view
 from pillow_assistant.core.model_router import select_model
 from pillow_assistant.core.observability import AuditLog
 from pillow_assistant.core.tools.base import ToolContext
@@ -276,8 +277,12 @@ class Orchestrator:
 
         index = self.pm.store.index()
         current_id = getattr(self.pm.session, "project_id", None) if self.pm.session is not None else None
-        tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id,
-                          current_context=self._last_exchange(current_id), skills=self._skill_menu())
+        if current_id and quick_view.asks_to_view(request.prompt):
+            # "Show me the result" in a project: nothing for triage to decide.
+            tr = TriageResult(action="continue", project_id=current_id, confidence=1.0, rationale="view-only")
+        else:
+            tr = await triage(request.prompt, index, cfg=cfg, api_key=api_key, current_id=current_id,
+                              current_context=self._last_exchange(current_id), skills=self._skill_menu())
 
         # A short reply right after the project's answer ended with a question is the answer
         # to it ("打开", "要", "不用"): it stays in the project, whatever triage made of it alone.
@@ -354,6 +359,20 @@ class Orchestrator:
         # Load the project's recent history ACROSS sessions (session_id=None),
         # not just the current session. A switch / new session must never make
         # the Agent lose the project's accumulated context.
+        if tr.action == "continue" and quick_view.asks_to_view(request.prompt):
+            shown = quick_view.latest(project.workspace)
+            if shown:
+                # Only looking: open the newest outputs, no agent run.
+                await emit(AgentEvent(request_id=request.id, type=EventType.SURFACE, surface=SurfaceSpec(
+                    level=SurfaceLevel.L5, kind="multi", body="",
+                    payload={"views": [{"title": p.name, "path": str(p)} for p in shown], "layout": "row"})))
+                answer = t("core.quick_view", files="、".join(p.name for p in shown))
+                await emit(AgentEvent(request_id=request.id, type=EventType.TOKEN, text=answer, meta={"answer": True}))
+                audit._write({"kind": "quick_view", "files": [str(p) for p in shown]})
+                self.pm.store.record_turn(project, session_id, request.prompt, answer)
+                audit.run_end(len(answer))
+                await emit(AgentEvent(request_id=request.id, type=EventType.DONE))
+                return
         history = self.pm.store.load_history(project)
         memory_ctx = None
         final_context = context_text
