@@ -12,6 +12,41 @@ from pillow_assistant.ui.surface_window import SurfaceMainWindow
 from pillow_assistant.ui.undo_toast import UndoToast
 
 
+
+MULTI_GAP = 8
+MULTI_BAR_SPACE = 170  # room under the windows for the question bar
+
+
+def fit_windows(sizes: list, area: tuple, layout: str = "row") -> tuple:
+    """Screen boxes (x, y, w, h) for windows that want ``sizes``, side by side ("row") or
+    stacked ("column") in ``area`` (x, y, w, h): each keeps its own size up to its share of
+    the screen, and the group is centred. Also returns the y for the question bar."""
+    ax, ay, aw, ah = area
+    count = max(1, len(sizes))
+    if layout == "column":
+        share_w, share_h = int(aw * 0.9), (ah - MULTI_BAR_SPACE - MULTI_GAP * (count - 1)) // count
+    else:
+        share_w, share_h = (aw - MULTI_GAP * (count - 1)) // count, int(ah * 0.72)
+    fitted = [(min(max(w, 320), share_w), min(max(h, 240), share_h)) for w, h in sizes]
+    if layout == "column":
+        total = sum(h for _, h in fitted) + MULTI_GAP * (len(fitted) - 1)
+        y = ay + max(0, (ah - MULTI_BAR_SPACE - total) // 2)
+        boxes = []
+        for w, h in fitted:
+            boxes.append((ax + (aw - w) // 2, y, w, h))
+            y += h + MULTI_GAP
+        return boxes, y - MULTI_GAP + 4
+    total = sum(w for w, _ in fitted) + MULTI_GAP * (len(fitted) - 1)
+    tallest = max((h for _, h in fitted), default=0)
+    x = ax + max(0, (aw - total) // 2)
+    top = ay + max(0, (ah - MULTI_BAR_SPACE - tallest) // 2)
+    boxes = []
+    for w, h in fitted:
+        boxes.append((x, top + (tallest - h) // 2, w, h))
+        x += w + MULTI_GAP
+    return boxes, top + tallest + MULTI_GAP
+
+
 class EventPresenter:
     def __init__(self, coordinator, *, storage, bus=None, session=None,
                  undo_manager=None, ask_broker=None, flash_icon=None) -> None:
@@ -107,29 +142,9 @@ class EventPresenter:
         anchor_geometry = self.coordinator.anchor.frameGeometry()
         screen = QGuiApplication.screenAt(anchor_geometry.center()) or QGuiApplication.primaryScreen()
         available = screen.availableGeometry()
-        count = len(views)
-        gap = 8
-        bar_space = 170
-        if layout == "column":
-            width = int(available.width() * 0.62)
-            height = (available.height() - bar_space - gap * (count - 1)) // count
-            x = available.x() + (available.width() - width) // 2
-            geometries = [
-                QRect(x, available.y() + index * (height + gap), width, height)
-                for index in range(count)
-            ]
-            bar_y = available.y() + count * (height + gap) + 4
-        else:
-            width = (available.width() - gap * (count - 1)) // count
-            height = int(available.height() * 0.72)
-            y = available.y() + max(0, (available.height() - bar_space - height) // 2)
-            geometries = [
-                QRect(available.x() + index * (width + gap), y, width, height)
-                for index in range(count)
-            ]
-            bar_y = y + height + gap
 
-        for view, geometry in zip(views, geometries):
+        windows = []
+        for view in views:
             path = view.get("path")
             try:
                 if path:
@@ -153,10 +168,18 @@ class EventPresenter:
                 except Exception:
                     continue
             window.shown_path = path or None
+            windows.append(window)
+
+        # Each window opens at the size its content needs (what it chose for itself),
+        # never more than its share of the screen, and the row is centred.
+        boxes, bar_y = fit_windows(
+            [(w.width(), w.height()) for w in windows],
+            (available.x(), available.y(), available.width(), available.height()), layout)
+        for window, (x, y, w, h) in zip(windows, boxes):
             window.destroyed.connect(
                 lambda *_, item=window: self.coordinator.remove_multi_window(item)
             )
-            window.setGeometry(geometry)
+            window.setGeometry(QRect(x, y, w, h))
             window.show()
             window.raise_()
             self.coordinator.add_multi_window(window)

@@ -10,6 +10,8 @@ from pillow_assistant.core.i18n import t
 from pillow_assistant.ui.panels.base_panel import FilePanel
 
 MAX_PAGES = 5
+PAGE_WIDTH = 480
+LANDSCAPE_WIDTH = 860
 
 
 def _import_fitz():
@@ -26,6 +28,14 @@ def _import_fitz():
 
 class PdfPanel(FilePanel):
     TITLE = "PDF"
+    _page = None  # (w, h) of the first page as shown
+
+    def initial_size(self) -> tuple[int, int]:
+        """Fit the first page, plus the window's title and question bar."""
+        if self._page is None:
+            return super().initial_size()
+        w, h = self._page
+        return (max(420, w + 60), max(360, h + 210))
 
     def build_preview(self, layout: QVBoxLayout) -> None:
         fitz = _import_fitz()
@@ -57,7 +67,12 @@ class PdfPanel(FilePanel):
                 img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
                 label = QLabel(container)
                 label.setAlignment(Qt.AlignCenter)
-                label.setPixmap(QPixmap.fromImage(img).scaledToWidth(480, Qt.SmoothTransformation))
+                # Portrait pages at 480 px wide; landscape sheets (drawings) wider, to stay legible.
+                width = PAGE_WIDTH if img.width() <= img.height() else LANDSCAPE_WIDTH
+                pixmap = QPixmap.fromImage(img).scaledToWidth(width, Qt.SmoothTransformation)
+                label.setPixmap(pixmap)
+                if self._page is None:
+                    self._page = (pixmap.width(), pixmap.height())
                 vbox.addWidget(label)
             if doc.page_count > MAX_PAGES:
                 vbox.addWidget(QLabel(t("panel.pdf_pages", total=doc.page_count, shown=MAX_PAGES), container))
