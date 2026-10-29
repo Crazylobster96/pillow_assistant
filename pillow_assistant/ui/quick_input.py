@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from pillow_assistant.contracts import AgentEvent, AppRequest, EventType, RequestKind
 from pillow_assistant.core.i18n import t
+from pillow_assistant.ui.prompt_edit import PromptEdit
 from pillow_assistant.ui.acrylic import disable_acrylic, glass_opacity, glass_theme_changed
 from pillow_assistant.ui.panels.base_panel import _CornerGrip
 
@@ -56,7 +57,7 @@ QLabel#toolStatus {{
     border: 1px solid rgba(255,255,255,90); border-radius: 9px;
     padding: 8px 10px; font-weight: bold;
 }}
-QComboBox, QLineEdit {{
+QComboBox, QLineEdit, QPlainTextEdit#promptEdit {{
     background: rgba(255,255,255,{control_alpha}); color: #18202A;
     border: 1px solid rgba(70,80,95,52); border-radius: 10px; padding: 7px;
     selection-background-color: rgba(55,120,220,150);
@@ -130,7 +131,7 @@ class QuickInputBar(QFrame):
             pass
         top.addWidget(self.model_combo)
 
-        self.prompt_edit = QLineEdit(self)
+        self.prompt_edit = PromptEdit(self)  # grows to 5 lines, then scrolls
         self.prompt_edit.setPlaceholderText(t("input.placeholder"))
         self.prompt_edit.setMinimumWidth(360)
         top.addWidget(self.prompt_edit, 1)
