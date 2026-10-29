@@ -19,6 +19,7 @@ VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv", ".
 MEDIA_EXT = AUDIO_EXT | VIDEO_EXT
 WEB_EXT = {".html", ".htm", ".svg"}  # shown live: scripts, animation, WebGL
 ARCHIVE_EXT = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".7z", ".rar"}
+MODEL_EXT = {".stl", ".step", ".stp"}  # turned in a 3D window
 TEXT_EXT = {
     ".txt", ".md", ".markdown", ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
     ".yaml", ".yml", ".toml", ".ini", ".cfg", ".html", ".css", ".xml", ".sh",
@@ -28,7 +29,7 @@ TEXT_EXT = {
 
 
 def classify(path: str | Path) -> str:
-    """Return a kind key: image|pdf|table|web|code|media|archive|folder|generic."""
+    """Return a kind key: image|pdf|table|web|code|media|archive|model|folder|generic."""
     p = Path(path)
     if p.is_dir():
         return "folder"
@@ -53,6 +54,8 @@ def classify(path: str | Path) -> str:
         return "media"
     if ext in ARCHIVE_EXT:
         return "archive"
+    if ext in MODEL_EXT:
+        return "model"
     return "generic"
 
 
@@ -77,6 +80,7 @@ def resolve(paths: list[str]):
     from pillow_assistant.ui.panels.generic_panel import GenericPanel
     from pillow_assistant.ui.panels.video_panel import VideoPanel
     from pillow_assistant.ui.panels.web_panel import WebPanel
+    from pillow_assistant.ui.panels.model_panel import ModelPanel
 
     if len(paths) != 1:
         return GenericPanel  # multiple files -> a listing panel
@@ -92,6 +96,7 @@ def resolve(paths: list[str]):
         "folder": ArchivePanel,
         "archive": ArchivePanel,
         "video": VideoPanel,
+        "model": ModelPanel,
         "media": GenericPanel,
         "generic": GenericPanel,
     }.get(kind, GenericPanel)
