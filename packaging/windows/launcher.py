@@ -550,6 +550,42 @@ def _other_instance_running() -> bool:
         return False
 
 
+SAC_NOTICE = (
+    "这台电脑开启了 Windows 的「智能应用控制」。\n\n"
+    "它会拦截没有数字签名的组件，而枕头的 CAD 内核、数值计算库等大多没有签名，"
+    "所以部分功能（CAD 建模、加工、语音等）可能无法运行。它不能只给枕头放行。\n\n"
+    "如果遇到功能失败，可以在 Windows 安全中心 → 应用和浏览器控制 → 智能应用控制设置 里关闭它。"
+    "注意：在部分 Windows 版本上关闭后要重装系统才能再打开。\n\n"
+    "点「确定」打开该设置页，点「取消」先继续使用。（此提示只显示一次）"
+)
+
+
+def warn_smart_app_control(log_dir: Path) -> None:
+    """Once per machine: when Smart App Control is on, say what it will block and how to
+    turn it off. (It cannot allow one app; if it blocks this launcher itself, nothing shows.)"""
+    if os.name != "nt":
+        return
+    flag = log_dir.parent / "sac_notice_shown"
+    if flag.exists():
+        return
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\CI\Policy") as key:
+            if int(winreg.QueryValueEx(key, "VerifiedAndReputablePolicyState")[0]) != 1:
+                return
+    except (OSError, ValueError):
+        return
+    try:
+        import ctypes
+        flag.parent.mkdir(parents=True, exist_ok=True)
+        flag.write_text("1", "utf-8")
+        # MB_OKCANCEL | MB_ICONWARNING | MB_TOPMOST; IDOK = 1
+        if ctypes.windll.user32.MessageBoxW(None, SAC_NOTICE, "Pillow Assistant", 0x1 | 0x30 | 0x40000) == 1:
+            os.startfile("windowsdefender://appbrowser")
+    except Exception:  # noqa: BLE001 - a notice must never stop the app from starting
+        log.exception("smart app control notice failed")
+
+
 SELF_TEST_MODULES = [
     "PySide6.QtWidgets", "pydantic", "litellm", "keyring", "numpy",
     "pandas", "matplotlib", "sounddevice", "funasr", "torch", "torchaudio",
@@ -661,6 +697,7 @@ def main(argv: Optional[list] = None) -> int:
         return self_test(paths)
 
     redirect_stdio(log_dir)
+    warn_smart_app_control(log_dir)
     if cfg.get("enabled", True) and not _other_instance_running():
         with UpdateLock(paths) as locked:
             if locked:

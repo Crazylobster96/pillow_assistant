@@ -63,6 +63,7 @@ def trailing_question(text: str) -> str:
 
 class ToolLoopAgent:
     _text_questions = 0
+    _sac_told = False  # Smart App Control explained to the user this run
 
     def __init__(self, cfg: dict, api_key: Optional[str], registry, ctx, max_steps: int = 6) -> None:
         self.cfg = cfg
@@ -146,6 +147,7 @@ class ToolLoopAgent:
         self._image_messages: list[tuple[int, int, str]] = []  # (message index, step, paths)
         self._call_nudges = 0
         self._text_questions = 0
+        self._sac_told = False
         self._empty_nudges = 0
         self.perf = {"model_s": 0.0, "tool_s": 0.0, "calls": 0, "input_tokens": 0, "output_tokens": 0}
         run_t0 = time.time()
@@ -404,6 +406,15 @@ class ToolLoopAgent:
         t0 = time.time()
         result = await self.registry.dispatch(tc.name, args, self.ctx)
         self._last_images = list(getattr(result, "images", None) or [])
+        if not getattr(result, "ok", True) and not self._sac_told:
+            from pillow_assistant.core import sac
+
+            if sac.blocked(result.text):
+                # Windows Smart App Control refused an unsigned DLL: say so once, plainly,
+                # instead of leaving the model to guess at a cryptic load error.
+                self._sac_told = True
+                result.text += "\n" + t("sac.blocked_model")
+                await emit(AgentEvent(request_id=request_id, type=EventType.TOKEN, text=t("sac.blocked_user")))
         if hasattr(self, "perf"):
             self.perf["tool_s"] += time.time() - t0
         summary = result.text
