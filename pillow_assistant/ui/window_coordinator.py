@@ -48,10 +48,11 @@ def side_by_side(near: tuple, size: tuple, area: tuple) -> tuple:
     nx, ny, nw, nh = near
     w, h = size
     ax, ay, aw, ah = area
+    side_y = max(ay, min(ny, ay + ah - h))  # top-aligned, slid up only as far as the screen needs
     candidates = [
         (nx, ny + nh + PLACE_GAP),           # below
-        (nx + nw + PLACE_GAP, ny),           # right
-        (nx - w - PLACE_GAP, ny),            # left
+        (nx + nw + PLACE_GAP, side_y),       # right
+        (nx - w - PLACE_GAP, side_y),        # left
         (nx, ny - h - PLACE_GAP),            # above
     ]
 

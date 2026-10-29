@@ -65,6 +65,7 @@ def test_placement_falls_back_from_below_to_right_left_and_above():
 
     area = (0, 0, 1920, 1080)
     assert side_by_side((100, 100, 800, 300), (700, 500), area) == (100, 408)        # below
-    assert side_by_side((100, 500, 800, 300), (700, 600), area) == (908, 500)        # right
-    assert side_by_side((1100, 500, 800, 300), (700, 600), area) == (392, 500)       # left
+    assert side_by_side((100, 300, 800, 300), (700, 600), area) == (908, 300)        # right
+    assert side_by_side((100, 500, 800, 300), (700, 600), area) == (908, 480)        # right, slid up to fit
+    assert side_by_side((1100, 300, 800, 300), (700, 600), area) == (392, 300)       # left
     assert side_by_side((0, 600, 1900, 300), (700, 500), area) == (0, 92)            # above
