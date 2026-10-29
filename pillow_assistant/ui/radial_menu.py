@@ -99,6 +99,40 @@ class RadialMenu(QWidget):
                 while radius < 300 and fan_overlaps(base, radius, inflated):
                     radius += 24.0
 
+        # Every button on screen. Near an edge the fan turns; if no turn fits, it narrows
+        # (and moves out so the buttons keep their spacing). The ring itself never moves off
+        # the icon: moving it would leave buttons off-centre, some of them over the icon.
+        scr = QGuiApplication.screenAt(center_global) or QGuiApplication.primaryScreen()
+        if scr is not None and n > 1:
+            reach = int(self._hit)
+            area = scr.availableGeometry().adjusted(reach, reach, -reach, -reach)
+            chord = self.BTN + 2 * self.PAD + 12.0
+
+            def on_screen(b: float, r: float, sp: float) -> bool:
+                stp = sp / (n - 1)
+                return all(area.contains(QPoint(int(cx + r * math.cos(b - sp / 2 + stp * i)),
+                                                int(cy + r * math.sin(b - sp / 2 + stp * i))))
+                           for i in range(n))
+
+            def clear(b: float, r: float) -> bool:
+                return avoid_rect is None or not fan_overlaps(b, r, inflated)
+
+            def turned(r: float, sp: float):
+                for deg in range(0, 181, 15):
+                    for sign in ((1,) if deg == 0 else (1, -1)):
+                        b = base + math.radians(sign * deg)
+                        if on_screen(b, r, sp) and clear(b, r):
+                            return b
+                return None
+
+            fit = turned(radius, spread)
+            while fit is None and spread > math.radians(90):
+                spread -= math.radians(15)
+                radius = max(radius, chord / (2 * math.sin(spread / (n - 1) / 2)))
+                fit = turned(radius, spread)
+            if fit is not None:
+                base = fit
+
         self._side = (int(radius) + self.BTN) * 2
         self.resize(self._side, self._side)
 
@@ -149,15 +183,10 @@ class RadialMenu(QWidget):
         return radius, total
 
     def reposition(self, center_global: QPoint) -> None:
+        """Centre the ring on the icon. The window may reach past the screen edge: only the
+        buttons are drawn (and masked in), and the fan was turned to keep them on screen."""
         side = self._side
-        top_left = QPoint(center_global.x() - side // 2, center_global.y() - side // 2)
-        scr = QGuiApplication.screenAt(center_global) or QGuiApplication.primaryScreen()
-        if scr is not None:
-            g = scr.availableGeometry()
-            x = max(g.left(), min(top_left.x(), g.right() - side))
-            y = max(g.top(), min(top_left.y(), g.bottom() - side))
-            top_left = QPoint(x, y)
-        self.move(top_left)
+        self.move(QPoint(center_global.x() - side // 2, center_global.y() - side // 2))
 
     # -- painting -----------------------------------------------------------
     def paintEvent(self, event) -> None:  # noqa: N802
