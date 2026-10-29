@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QTimer
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -29,7 +29,7 @@ class _OnClose(QObject):
     def eventFilter(self, obj, event):  # noqa: N802
         if event.type() == QEvent.Close and self._callback is not None:
             callback, self._callback = self._callback, None
-            QTimer.singleShot(0, callback)  # after the close (and the menu's action) has run
+            callback()  # during the close: before the menu runs the action that was picked
         return False
 
 
@@ -155,8 +155,9 @@ class WindowCoordinator:
             *self.multi_windows,
         ]
 
-    def place_near_icon(self, window) -> None:
-        window.adjustSize()
+    def place_near_icon(self, window, *, fit: bool = True) -> None:
+        if fit:
+            window.adjustSize()
         width, height = window.width(), window.height()
         anchor_geometry = self.anchor.frameGeometry()
         screen = QGuiApplication.screenAt(anchor_geometry.center()) or QGuiApplication.primaryScreen()
@@ -326,20 +327,8 @@ class WindowCoordinator:
         menu.raise_()
 
     def after_menu_closed(self) -> None:
-        """The menu is gone: the dialog it pushed aside goes back next to the button, once
-        whatever window the menu opened (projects, memory, settings) is closed too."""
-        opened = []
-        for name in ("projects", "memory"):
-            window = self.window(name)
-            try:
-                if window is not None and window.isVisible():
-                    opened.append(window)
-            except RuntimeError:  # already deleted
-                pass
-        if opened:
-            for window in opened:
-                when_closed(window, self.after_menu_closed)
-            return
+        """The menu is gone: the dialog it pushed aside goes back next to the button right
+        away, before the window the menu opens (projects, memory) is placed beside it."""
         self.restore_room_for_menu()
 
     def restore_room_for_menu(self) -> None:
@@ -397,7 +386,7 @@ class WindowCoordinator:
         )
         self.set_window("projects", window)
         window.destroyed.connect(lambda *_, item=window: self.clear_window("projects", item))
-        window.move(self.anchor.frameGeometry().center())
+        self.place_near_icon(window, fit=False)  # beside the button, clear of the question dialog
         window.show()
         window.raise_()
         window.activateWindow()
@@ -433,7 +422,7 @@ class WindowCoordinator:
         window = ConversationMemoryPanel(self.storage.db_path)
         self.set_window("memory", window)
         window.destroyed.connect(lambda *_, item=window: self.clear_window("memory", item))
-        window.move(self.anchor.frameGeometry().center())
+        self.place_near_icon(window, fit=False)  # beside the button, clear of the question dialog
         window.show()
         window.raise_()
         window.activateWindow()
