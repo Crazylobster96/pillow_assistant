@@ -57,4 +57,14 @@ def test_projects_open_in_the_dialogs_column(app):
     projects.resize(500, 300)
     coordinator.place_under_dialog(projects)
     assert projects.x() == bar.frameGeometry().left()
-    assert projects.y() == bar.frameGeometry().bottom() + 8
+    assert projects.y() == bar.frameGeometry().top() + bar.frameGeometry().height() + 8
+
+
+def test_placement_falls_back_from_below_to_right_left_and_above():
+    from pillow_assistant.ui.window_coordinator import side_by_side
+
+    area = (0, 0, 1920, 1080)
+    assert side_by_side((100, 100, 800, 300), (700, 500), area) == (100, 408)        # below
+    assert side_by_side((100, 500, 800, 300), (700, 600), area) == (908, 500)        # right
+    assert side_by_side((1100, 500, 800, 300), (700, 600), area) == (392, 500)       # left
+    assert side_by_side((0, 600, 1900, 300), (700, 500), area) == (0, 92)            # above

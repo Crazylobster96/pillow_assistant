@@ -37,6 +37,34 @@ def when_closed(window, callback) -> None:
     _OnClose(window, callback)
 
 
+
+PLACE_GAP = 8
+
+
+def side_by_side(near: tuple, size: tuple, area: tuple) -> tuple:
+    """Where a window of ``size`` goes next to the ``near`` box (x, y, w, h) inside ``area``:
+    below (left edges aligned), right, left (top edges aligned), or above, whichever fits
+    first; if none fits whole, the one that shows the most of it, kept on screen."""
+    nx, ny, nw, nh = near
+    w, h = size
+    ax, ay, aw, ah = area
+    candidates = [
+        (nx, ny + nh + PLACE_GAP),           # below
+        (nx + nw + PLACE_GAP, ny),           # right
+        (nx - w - PLACE_GAP, ny),            # left
+        (nx, ny - h - PLACE_GAP),            # above
+    ]
+
+    def visible(x, y):
+        return max(0, min(x + w, ax + aw) - max(x, ax)) * max(0, min(y + h, ay + ah) - max(y, ay))
+
+    for x, y in candidates:
+        if visible(x, y) == w * h:
+            return x, y
+    x, y = max(candidates, key=lambda c: visible(*c))
+    return (min(max(x, ax), max(ax, ax + aw - w)), min(max(y, ay), max(ay, ay + ah - h)))
+
+
 class WindowCoordinator:
     """Own transient window references and keep them anchored to one widget."""
 
@@ -207,23 +235,21 @@ class WindowCoordinator:
         window.move(x, y)
 
     def place_under_dialog(self, window) -> None:
-        """A management window (projects, memory) goes in the same column as the question
-        dialog: left edges aligned, just below it (or below the button when there is no
-        dialog). Without room below, it goes beside the button, clear of the dialog."""
+        """A management window (projects, memory) is placed against the question dialog (or
+        the button when there is none): below it with left edges aligned when it fits there,
+        else to its right or left with top edges aligned, else above it."""
         anchor_geometry = self.anchor.frameGeometry()
         screen = QGuiApplication.screenAt(anchor_geometry.center()) or QGuiApplication.primaryScreen()
         available = screen.availableGeometry()
         bar = self.quick
         try:
-            above = bar.frameGeometry() if bar is not None and bar.isVisible() else anchor_geometry
+            near = bar.frameGeometry() if bar is not None and bar.isVisible() else anchor_geometry
         except RuntimeError:
-            above = anchor_geometry
-        x = min(max(above.left(), available.left()), max(available.left(), available.right() - window.width()))
-        y = above.bottom() + 8
-        if y + window.height() <= available.bottom():
-            window.move(x, y)
-            return
-        self.place_near_icon(window, fit=False)
+            near = anchor_geometry
+        x, y = side_by_side(
+            (near.left(), near.top(), near.width(), near.height()), (window.width(), window.height()),
+            (available.left(), available.top(), available.width(), available.height()))
+        window.move(x, y)
 
     def capture_follow_offsets(self) -> None:
         offsets = []
