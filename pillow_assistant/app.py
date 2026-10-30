@@ -88,8 +88,29 @@ def main() -> int:
     from pillow_assistant.core.no_console import install
 
     install()  # console programs it starts run without flashing a window
+    _log_exits()
     app = PillowAssistantApplication()
     return app.run()
+
+
+def _log_exits() -> None:
+    """Leave a trace when Pillow goes away: a native crash (Qt, WebEngine) dumps every
+    thread's stack to logs/crash.log, and a normal exit says so in the app log."""
+    import atexit
+    import faulthandler
+    import time
+
+    try:
+        logs = Path.home() / ".pillow" / "logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        crash = open(logs / "crash.log", "a", encoding="utf-8")  # noqa: SIM115 - open for the whole run
+        crash.write(f"\n===== started {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+        crash.flush()
+        faulthandler.enable(crash, all_threads=True)
+    except OSError:
+        pass
+    atexit.register(lambda: print(f"[pillow] exited normally at {time.strftime('%H:%M:%S')}",
+                                  file=sys.stderr, flush=True))
 
 
 if __name__ == "__main__":
