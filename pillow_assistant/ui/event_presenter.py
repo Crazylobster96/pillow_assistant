@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QGuiApplication
 
@@ -134,6 +136,19 @@ class EventPresenter:
             self.flash_icon()
         elif level == SurfaceLevel.L5:
             self.open_surface_window(surface)
+
+    def open_dropped(self, paths: list[str]) -> None:
+        """Files dropped on the icon: several with viewers of their own open in a row,
+        anything else in one panel (a single file's viewer, or the listing)."""
+        from pillow_assistant.ui.viewer_registry import side_by_side
+
+        if not side_by_side(paths):
+            self.coordinator.open_file_panel(paths)
+            return
+        if self.session is not None:
+            for path in paths:
+                self.session.add_reference(path)  # all of them go with the next question
+        self.open_multi_windows({"views": [{"title": Path(p).name, "path": p} for p in paths], "layout": "row"})
 
     def open_multi_windows(self, payload: dict) -> None:
         from pillow_assistant.ui.viewer_registry import resolve

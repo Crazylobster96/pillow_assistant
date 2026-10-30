@@ -66,6 +66,19 @@ def panel_kind(paths: list[str]) -> str:
     return classify(paths[0])
 
 
+SIDE_BY_SIDE_MAX = 3
+LISTED = {"folder", "archive", "media", "generic"}  # kinds with no viewer of their own
+
+
+def side_by_side(paths: list[str]) -> bool:
+    """Pure: whether a drop of several files opens each in its own viewer, in a row.
+
+    Two STEPs, two images, a PDF and a table: each has a viewer, so they are shown
+    beside each other instead of as a listing. Folders, archives and files with no
+    viewer of their own, or more than SIDE_BY_SIDE_MAX files, keep the listing panel."""
+    return 1 < len(paths) <= SIDE_BY_SIDE_MAX and all(classify(p) not in LISTED for p in paths)
+
+
 def resolve(paths: list[str]):
     """Return the FilePanel subclass to open for the given dropped paths."""
     # Imported lazily to avoid a circular import (panels import the base which

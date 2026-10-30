@@ -100,3 +100,18 @@ def test_the_tracker_reports_a_finished_run_with_its_project():
                                 meta={"project": "安装板", "project_id": "p1"}))
     tracker.on_event(AgentEvent(request_id="r", type=EventType.DONE))
     assert [(r.project, r.project_id) for r in ended] == [("安装板", "p1")]
+
+
+def test_a_dragged_out_panel_can_be_closed_and_the_next_task_opens_a_new_one(app):
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    panel = TaskPanel()
+    panel.add("r1", "做一块板")
+    panel.show()
+    panel.docked = False
+    TaskPanel.detached = panel
+    gone = []
+    panel.destroyed.connect(lambda *_: gone.append(True))
+    panel.close_btn.click()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert gone and TaskPanel.detached is None

@@ -4,7 +4,8 @@ Pillow has no CAD application of its own, so the mesh is drawn by a small,
 self-contained WebGL page (no external scripts, works offline) in Qt WebEngine:
 drag to rotate, wheel to zoom, buttons for the standard views. STEP has no mesh;
 the panel uses an STL of the same part when one exists (beside it, in ../STL, or
-the one Pillow's reviewer made in .pillow/review) and otherwise offers FreeCAD.
+the one Pillow's reviewer made in .pillow/review). Without one, the CAD edition
+tessellates the STEP in the background (cadgen runtime); otherwise FreeCAD is offered.
 """
 
 from __future__ import annotations
@@ -12,12 +13,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import subprocess
+import threading
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from pillow_assistant.core.i18n import t
 from pillow_assistant.ui.panels.base_panel import FilePanel
@@ -44,7 +46,40 @@ def mesh_for(path: Path) -> Optional[Path]:
         candidates.append(review)
         if (parent / ".pillow").is_dir():
             break
-    return next((c for c in candidates if c.is_file()), None)
+    found = next((c for c in candidates if c.is_file()), None)
+    if found is not None:
+        return found
+    made = converted_stl(path)  # one this panel tessellated earlier, if the STEP has not changed since
+    try:
+        return made if made.stat().st_mtime >= path.stat().st_mtime else None
+    except OSError:
+        return None
+
+
+def converted_stl(path: Path) -> Path:
+    """Where the panel keeps the STL it makes of a STEP: the project's review folder, else a cache."""
+    home = Path.home()
+    for parent in path.parents:
+        if parent == home:
+            break  # ~/.pillow is Pillow's own data, not a project's
+        if (parent / ".pillow").is_dir():
+            return parent / ".pillow" / "review" / f"{path.stem}.stl"
+    key = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
+    return Path.home() / ".pillow" / "cache" / "model_view" / f"{key}-{path.stem}.stl"
+
+
+def can_tessellate() -> bool:
+    """Whether a STEP can be turned into a mesh here (the CAD edition's cadgen runtime)."""
+    try:
+        from pillow_assistant.capabilities import text_to_cad
+        from pillow_assistant.core import cad_review  # noqa: F401
+    except ImportError:
+        return False
+    return text_to_cad.find_uv() is not None
+
+
+class _Done(QObject):
+    done = Signal(bool)
 
 
 def viewer_html(stl_bytes: bytes, title: str) -> str:
@@ -106,8 +141,20 @@ class ModelPanel(FilePanel):
     TITLE = t("panel.model")
 
     def build_preview(self, layout: QVBoxLayout) -> None:
+        self._box = QWidget(self)
+        self._box_layout = QVBoxLayout(self._box)
+        self._box_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._box, 1)
+        self._fill(self._box_layout, convert=True)
+
+    def _fill(self, layout: QVBoxLayout, convert: bool) -> None:
         path = Path(self.paths[0])
         mesh = mesh_for(path)
+        if mesh is None and convert and HAVE_WEB and path.suffix.lower() in {".step", ".stp"} and can_tessellate():
+            layout.addWidget(QLabel(t("panel.model_converting"), self))
+            layout.addStretch(1)
+            self._convert(path)
+            return
         if mesh is None or not HAVE_WEB or mesh.stat().st_size > MAX_STL:
             reason = t("panel.model_no_mesh") if mesh is None else (
                 t("panel.web_unavailable") if not HAVE_WEB else t("panel.model_too_big"))
@@ -128,6 +175,35 @@ class ModelPanel(FilePanel):
 
     def initial_size(self) -> tuple[int, int]:
         return (760, 640)
+
+    def _convert(self, path: Path) -> None:
+        """Tessellate the STEP off the UI thread, then draw it (or say why not)."""
+        from pillow_assistant.core import cad_review
+
+        self._done = _Done(self)
+        self._done.done.connect(self._converted)
+        signal = self._done.done
+        target = converted_stl(path)
+
+        def work() -> None:
+            try:
+                ok = cad_review.tessellate(path, target)
+            except Exception:  # noqa: BLE001 - no mesh is the FreeCAD fallback, not a crash
+                ok = False
+            try:
+                signal.emit(ok)
+            except RuntimeError:  # the window was closed meanwhile
+                pass
+
+        threading.Thread(target=work, name="pillow-step-mesh", daemon=True).start()
+
+    def _converted(self, _ok: bool) -> None:
+        layout = self._box_layout
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        self._fill(layout, convert=False)
 
     @staticmethod
     def _page(mesh: Path) -> Path:

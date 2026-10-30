@@ -49,6 +49,11 @@ def test_panel_kind():
     check("single csv -> table", viewer_registry.panel_kind(["a.csv"]) == "table")
     check("multi -> multi", viewer_registry.panel_kind(["a.csv", "b.png"]) == "multi")
     check("single py -> code", viewer_registry.panel_kind(["x.py"]) == "code")
+    check("two STEPs side by side", viewer_registry.side_by_side(["a.step", "b.step"]))
+    check("STEP and image side by side", viewer_registry.side_by_side(["a.step", "b.png"]))
+    check("one file is not a row", not viewer_registry.side_by_side(["a.step"]))
+    check("four files are a listing", not viewer_registry.side_by_side(["a.png", "b.png", "c.png", "d.png"]))
+    check("a zip is listed", not viewer_registry.side_by_side(["a.step", "b.zip"]))
 
 
 def test_read_table_rows():

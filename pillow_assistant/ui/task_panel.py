@@ -329,6 +329,7 @@ class TaskPanel(QWidget):
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)  # reopening the dialog brings the pages back
         self.setObjectName("taskPanel")
         from pillow_assistant.ui.quick_input import panel_qss  # same glass look as the dialog
 
@@ -342,6 +343,13 @@ class TaskPanel(QWidget):
         outer.addWidget(self.stack, 1)
         column = QVBoxLayout()
         column.setSpacing(6)
+        self.close_btn = QPushButton("×", self)  # the runs go on; only the window closes
+        self.close_btn.setToolTip(t("task.close"))
+        self.close_btn.setFixedSize(26, 26)
+        self.close_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 18px;"
+                                     " color: #4A5563; } QPushButton:hover { color: #D04545; }")
+        self.close_btn.clicked.connect(self.close)
+        column.addWidget(self.close_btn, 0, Qt.AlignRight)
         self.tabs_box = QVBoxLayout()
         self.tabs_box.setSpacing(6)
         column.addLayout(self.tabs_box)
