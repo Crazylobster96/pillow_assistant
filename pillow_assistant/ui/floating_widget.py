@@ -207,4 +207,4 @@ class FloatingAssistant(QWidget):
         paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
         event.acceptProposedAction()
         if paths:
-            self.windows.open_file_panel(paths)
+            self.presenter.open_dropped(paths)
