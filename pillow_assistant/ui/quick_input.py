@@ -451,6 +451,7 @@ class QuickInputBar(QFrame):
             else:
                 panel.bind(self._follow_up, current, self._switch_to, self._dock_panel)
             panel.show()
+            panel.destroyed.connect(lambda *_, gone=panel: self._task_panel_gone(gone))
             self._task_panel = panel
         page = self._task_panel.page(rid)
         if page is None:
@@ -475,6 +476,11 @@ class QuickInputBar(QFrame):
         """Said on a finished task's page: a new request (the intent check finds its task)."""
         self.prompt_edit.setText(text)
         self._on_submit()
+
+    def _task_panel_gone(self, panel) -> None:
+        """The panel was closed with its own button: the next task opens a new one."""
+        if self._task_panel is panel:
+            self._task_panel = None
 
     def _close_task_panel(self) -> None:
         panel, self._task_panel = self._task_panel, None
